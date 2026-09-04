@@ -99,6 +99,8 @@
     <label style="min-width:auto"><input id="showFrame" type="checkbox"> 書き出し枠</label></div>
 
   <h2>2005年化の編集</h2>
+  <div class="row seg"><button id="apply2005" class="primary">2005年版を適用</button><button id="clearEdits">現況に戻す</button></div>
+  <div class="small">2005年版＝ヒカリエ・スクランブルスクエア・ストリーム・フクラス・銀座線新駅などを消し、東横店・東横線ホーム・旧東急プラザなどを箱で置く。箱は「編集」で直せる。</div>
   <div class="row seg"><button id="editDelete">消すモード（建物をクリック）</button></div>
   <div id="hiddenList" class="small"></div>
   <div class="row"><b class="small">箱を置く（戻す建物の当たり）</b></div>
@@ -108,6 +110,14 @@
   <div class="row"><label>X 東</label><input id="bxX" type="number" value="0"> <label>Y 北</label><input id="bxY" type="number" value="0"></div>
   <div class="row seg"><button id="editPlace">地面クリックで位置</button><button id="bxAdd" class="primary">追加</button></div>
   <div id="boxList" class="small"></div>
+  <div class="row"><b class="small">空中写真を地面に敷く（国土地理院）</b></div>
+  <div class="row"><select id="aerialLayer" style="width:200px">
+      <option value="">なし</option>
+      <option value="nendophoto2009|18">2009年度（2005年に最も近い：東横店・東横線ホームあり）</option>
+      <option value="airphoto|18">2016〜18年頃（スクランブルスクエア工事中）</option>
+      <option value="gazo4|17">1987〜90年</option>
+      <option value="seamlessphoto|18">現在（最新）</option></select></div>
+  <div class="row"><label>不透明度</label><input id="aerialAlpha" type="range" min="0" max="100" value="85"><label style="min-width:auto"><input id="aerialHideBldg" type="checkbox"> 建物を消して見る</label></div>
   <div class="row"><b class="small">写真を重ねる</b></div>
   <div class="row"><input id="photoFile" type="file" accept="image/*" style="width:200px"><label style="min-width:auto"><input id="photoOn" type="checkbox" checked> 表示</label></div>
   <div class="row"><label>不透明度</label><input id="photoAlpha" type="range" min="0" max="100" value="50"><label>拡大</label><input id="photoScale" type="range" min="30" max="200" value="100"></div>
@@ -124,6 +134,7 @@
   <div class="row"><button id="shoot" class="primary">PNGを書き出す</button></div>
   <p class="small">座標＝原点はスクランブル交差点、X東・Y北・Z標高m。</p>
   <p class="small">出典：3D都市モデル（Project PLATEAU）渋谷区（2025年度）／国土交通省。建物の形・写真はPLATEAUのデータをそのまま表示している（現況。2005年の姿ではない）。</p>
+  <p class="small">空中写真：地理院タイル（国土地理院）。建物：3D都市モデル Project PLATEAU 渋谷区 2025年度（国土交通省）。</p>
 </div>
 <button id="toggle">☰</button>
 
@@ -465,13 +476,84 @@ function applyEdits(data, merge = false) {
   for (const b of data.boxes || []) { const nb = { ...b }; boxes.push(nb); rebuildBox(nb); }
   renderHidden(); renderBoxes(); saveEdits(); mmDirty = true;
 }
-function loadEdits() { try { const d = JSON.parse(localStorage.getItem(LS_EDITS) || 'null'); if (d) applyEdits(d); } catch {} }
+function loadEdits() { let d = null; try { d = JSON.parse(localStorage.getItem(LS_EDITS) || 'null'); } catch {} if (d) applyEdits(d); else apply2005(); }
+async function apply2005() {
+  try { const d = await (await fetch('./data/edits_2005.json')).json(); applyEdits(d); status('2005年版を適用した（消した建物 ' + (d.hidden || []).length + '、箱 ' + (d.boxes || []).length + '）'); }
+  catch (e) { status('2005年版の読み込みに失敗: ' + e.message); }
+}
+$('apply2005').onclick = apply2005;
+$('clearEdits').onclick = () => { applyEdits({ hidden: [], boxes: [] }); status('現況に戻した'); };
 $('exportEdits').onclick = () => { const blob = new Blob([JSON.stringify(editsData(), null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shibuya_2005_edits.json'; a.click(); };
 $('importEdits').onclick = () => $('importEditsFile').click();
 $('importEditsFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; applyEdits(JSON.parse(await f.text()), true); };
 // 写真
 let photo = null;
 $('photoFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { photo = img; }; img.src = URL.createObjectURL(f); };
+
+// ---------- 空中写真タイルを地面（dem/tran）に投影
+// 緯度経度 → 平面直角座標第9系 (X北,Y東)。国土地理院の式（GRS80）
+function latlonToXY(latDeg, lonDeg) {
+  const a = 6378137.0, F = 298.257222101, m0 = 0.9999, n = 1 / (2 * F - 1);
+  const phi = latDeg * Math.PI / 180, lam = lonDeg * Math.PI / 180, phi0 = 36 * Math.PI / 180, lam0 = (139 + 50 / 60) * Math.PI / 180;
+  const A = [1 + n ** 2 / 4 + n ** 4 / 64, -3 / 2 * (n - n ** 3 / 8 - n ** 5 / 64), 15 / 16 * (n ** 2 - n ** 4 / 4), -35 / 48 * (n ** 3 - 5 / 16 * n ** 5), 315 / 512 * n ** 4, -693 / 1280 * n ** 5];
+  const al = [0, 1 / 2 * n - 2 / 3 * n ** 2 + 5 / 16 * n ** 3 + 41 / 180 * n ** 4 - 127 / 288 * n ** 5, 13 / 48 * n ** 2 - 3 / 5 * n ** 3 + 557 / 1440 * n ** 4 + 281 / 630 * n ** 5, 61 / 240 * n ** 3 - 103 / 140 * n ** 4 + 15061 / 26880 * n ** 5, 49561 / 161280 * n ** 4 - 179 / 168 * n ** 5, 34729 / 80640 * n ** 5];
+  const Abar = m0 * a / (1 + n) * A[0];
+  let Sbar = A[0] * phi0; for (let j = 1; j <= 5; j++) Sbar += A[j] * Math.sin(2 * j * phi0); Sbar *= m0 * a / (1 + n);
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - 2 * Math.sqrt(n) / (1 + n) * Math.atanh(2 * Math.sqrt(n) / (1 + n) * Math.sin(phi)));
+  const tb = Math.sqrt(1 + t * t), lc = Math.cos(lam - lam0), ls = Math.sin(lam - lam0);
+  const xi = Math.atan2(t, lc), eta = Math.atanh(ls / tb);
+  let x = xi, y = eta; for (let j = 1; j <= 5; j++) { x += al[j] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta); y += al[j] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta); }
+  return [Abar * x - Sbar, Abar * y]; // X北, Y東
+}
+const ORIGIN_XY = [-37767.5, -12026.8]; // 交差点 (X北, Y東)
+function latlonToLocal(lat, lon) { const [X, Y] = latlonToXY(lat, lon); return [Y - ORIGIN_XY[1], X - ORIGIN_XY[0]]; } // [東, 北]
+function tileToLatLon(x, y, z) { const n = 2 ** z; const lon = x / n * 360 - 180; const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI; return [lat, lon]; }
+const aerial = { tex: null, canvas: null, affine: null, saved: new Map() };
+async function setAerial(spec) {
+  // 元に戻す
+  if (!spec) { for (const [m, mat] of aerial.saved) m.material = mat; aerial.saved.clear(); aerial.tex = null; return; }
+  const [layer, zs] = spec.split('|'); const z = +zs;
+  const [lat0, lon0] = [35.65951, 139.70050];
+  const n = 2 ** z; const tx0 = Math.floor((lon0 + 180) / 360 * n); const ty0 = Math.floor((1 - Math.log(Math.tan(lat0 * Math.PI / 180) + 1 / Math.cos(lat0 * Math.PI / 180)) / Math.PI) / 2 * n);
+  const R = z >= 18 ? 6 : 3; const N = 2 * R + 1; // z18: 13×13タイル ≒ 1.6km角
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256 * N; const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ddd'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; aerial.tex = tex; aerial.canvas = canvas;
+  // アフィン：ローカル(東,北) → (u,v)。格子の角で最小二乗
+  const pts = [];
+  for (let i = 0; i <= N; i += Math.max(1, N >> 1)) for (let j = 0; j <= N; j += Math.max(1, N >> 1)) {
+    const [lat, lon] = tileToLatLon(tx0 - R + i, ty0 - R + j, z); const [e, no] = latlonToLocal(lat, lon); pts.push([e, no, i / N, 1 - j / N]);
+  }
+  const solve = (k) => { // u = a*e + b*n + c
+    let S = [[0,0,0],[0,0,0],[0,0,0]], T = [0,0,0];
+    for (const p of pts) { const v = [p[0], p[1], 1]; for (let r = 0; r < 3; r++) { T[r] += v[r] * p[k]; for (let c = 0; c < 3; c++) S[r][c] += v[r] * v[c]; } }
+    // 3x3 クラメル
+    const det = (M) => M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1]) - M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0]) + M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);
+    const D = det(S); const col = (i) => { const M = S.map(r => r.slice()); for (let r = 0; r < 3; r++) M[r][i] = T[r]; return det(M) / D; };
+    return [col(0), col(1), col(2)];
+  };
+  aerial.affine = { u: solve(2), v: solve(3) };
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: (+$('aerialAlpha').value) / 100, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const targets = [...groups.dem.children, ...groups.tran.children];
+  for (const m of targets) {
+    if (!aerial.saved.has(m)) aerial.saved.set(m, m.material);
+    const g = m.geometry; const pos = g.attributes.position; const uv = new Float32Array(pos.count * 2); const v = new THREE.Vector3();
+    const { u: au, v: av } = aerial.affine;
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld); const e = v.x, no = -v.z; uv[2*i] = au[0]*e + au[1]*no + au[2]; uv[2*i+1] = av[0]*e + av[1]*no + av[2]; }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); m.material = mat;
+  }
+  // タイル読み込み（順次、少し間隔）
+  let done = 0;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => { if (aerial.tex !== tex) return; ctx.drawImage(img, i * 256, j * 256); tex.needsUpdate = true; done++; status(`空中写真 ${done}/${N*N}`); };
+    img.src = `https://cyberjapandata.gsi.go.jp/xyz/${layer}/${z}/${tx0 - R + i}/${ty0 - R + j}.${layer.startsWith('gazo') ? 'jpg' : 'png'}`;
+    await new Promise(r => setTimeout(r, 25));
+  }
+}
+$('aerialLayer').onchange = () => setAerial($('aerialLayer').value);
+$('aerialAlpha').oninput = () => { for (const m of aerial.saved.keys()) if (m.material.map === aerial.tex) m.material.opacity = (+$('aerialAlpha').value) / 100; };
+$('aerialHideBldg').onchange = () => { const hide = $('aerialHideBldg').checked; groups.bldg.visible = !hide; groups.boxes.visible = !hide; groups.brid.visible = !hide && $('showBrid').checked; groups.frn.visible = !hide && $('showFrn').checked; };
 
 // ---------- 表示切替
 $('showEdges').onchange = () => { for (const r of meshes) if (r.edges) r.edges.visible = $('showEdges').checked; };
