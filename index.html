@@ -121,6 +121,11 @@
   <div class="row"><b class="small">写真を重ねる</b></div>
   <div class="row"><input id="photoFile" type="file" accept="image/*" style="width:200px"><label style="min-width:auto"><input id="photoOn" type="checkbox" checked> 表示</label></div>
   <div class="row"><label>不透明度</label><input id="photoAlpha" type="range" min="0" max="100" value="50"><label>拡大</label><input id="photoScale" type="range" min="30" max="200" value="100"></div>
+  <div class="row"><b class="small">写真から視点を合わせる（対応点）</b></div>
+  <div class="small">①写真を読み込む ②「写真の点」を押して写真上の目印をクリック ③「モデルの点」を押して同じ場所を3Dでクリック（写真は薄くなる）。4組以上で「計算」。角・窓・看板の角が良い。</div>
+  <div class="row seg"><button id="pickPhoto">写真の点</button><button id="pickModel">モデルの点</button><button id="solvePose" class="primary">計算</button><button id="clearPairs">消す</button></div>
+  <div class="row"><label style="min-width:auto"><input id="lockFocal" type="checkbox"> 焦点距離を固定（EXIFで分かるとき）</label></div>
+  <div id="pairList" class="small"></div>
   <div class="row"><button id="exportEdits">編集をJSON書き出し</button><button id="importEdits">JSON読み込み</button><input id="importEditsFile" type="file" accept="application/json" hidden></div>
 
   <h2>視点の保存</h2>
@@ -353,6 +358,7 @@ canvas.addEventListener('pointerup', (e) => {
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
   const nd = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   ray.setFromCamera(nd, camera); ray.far = 3000;
+  if (handlePickClick(e)) return;
   if (editMode === 'delete') {
     const hits = ray.intersectObjects(groups.bldg.children, false);
     if (hits.length) hideBuilding(hits[0].object);
@@ -488,7 +494,77 @@ $('importEdits').onclick = () => $('importEditsFile').click();
 $('importEditsFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; applyEdits(JSON.parse(await f.text()), true); };
 // 写真
 let photo = null;
-$('photoFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { photo = img; }; img.src = URL.createObjectURL(f); };
+$('photoFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { photo = img; $('shotW').value = img.width; $('shotH').value = img.height; $('showFrame').checked = true; status(`写真 ${img.width}×${img.height}。書き出し枠を写真に合わせた`); }; img.src = URL.createObjectURL(f); };
+// ---- 対応点でカメラを解く
+const pairs = []; let pick = null; let pendingPhoto = null;
+function frameRect() { const w = window.innerWidth, h = window.innerHeight; const ar = (+$('shotW').value) / (+$('shotH').value); let fw = w, fh = w / ar; if (fh > h) { fh = h; fw = h * ar; } return { x: (w - fw) / 2, y: (h - fh) / 2, w: fw, h: fh }; }
+function setPick(m) { pick = pick === m ? null : m; $('pickPhoto').classList.toggle('on', pick === 'photo'); $('pickModel').classList.toggle('on', pick === 'model'); document.body.classList.toggle('editing', !!pick || !!editMode);
+  status(pick === 'photo' ? '写真上の目印をクリック' : pick === 'model' ? '同じ場所を3Dモデル上でクリック（写真は薄く表示）' : ''); }
+$('pickPhoto').onclick = () => setPick('photo'); $('pickModel').onclick = () => setPick('model');
+$('clearPairs').onclick = () => { pairs.length = 0; pendingPhoto = null; renderPairs(); };
+function renderPairs() { $('pairList').textContent = pairs.length ? `対応点 ${pairs.length} 組` + (pendingPhoto ? '（写真の点を1つ待機中）' : '') : (pendingPhoto ? '写真の点を1つ打った。次にモデルの点' : ''); }
+function handlePickClick(e) {
+  if (!pick) return false;
+  if (pick === 'photo') {
+    if (!photo) { status('先に写真を読み込む'); return true; }
+    const r = frameRect(); const px = (e.clientX - r.x) / r.w * photo.width, py = (e.clientY - r.y) / r.h * photo.height;
+    if (px < 0 || py < 0 || px > photo.width || py > photo.height) { status('写真の枠の中をクリック'); return true; }
+    pendingPhoto = [px, py]; setPick('model'); renderPairs(); return true;
+  }
+  if (pick === 'model') {
+    if (!pendingPhoto) { status('先に写真の点を打つ'); setPick('photo'); return true; }
+    const nd = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(nd, camera); ray.far = 5000;
+    const hits = ray.intersectObjects([...groups.bldg.children, ...groups.boxes.children, ...groups.tran.children, ...groups.dem.children, ...groups.brid.children, ...groups.frn.children], true);
+    if (!hits.length) { status('モデルに当たらなかった'); return true; }
+    pairs.push({ photo: pendingPhoto, world: hits[0].point.clone() }); pendingPhoto = null; setPick('photo'); renderPairs(); return true;
+  }
+  return false;
+}
+// 投影誤差（写真ピクセル）
+const tmpCam = new THREE.PerspectiveCamera(50, 1, 0.3, 6000); tmpCam.rotation.order = 'YXZ';
+function reproj(pv, W, H) {
+  const [x, y, z, yaw, pitch, roll, focal] = pv;
+  tmpCam.position.copy(b2t(x, y, z)); tmpCam.rotation.set(THREE.MathUtils.degToRad(pitch), THREE.MathUtils.degToRad(-yaw), THREE.MathUtils.degToRad(roll), 'YXZ');
+  const hfov = 2 * Math.atan(18 / Math.max(6, focal)); tmpCam.aspect = W / H; tmpCam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / tmpCam.aspect)); tmpCam.updateProjectionMatrix(); tmpCam.updateMatrixWorld();
+  let err = 0; const v = new THREE.Vector3();
+  for (const p of pairs) { v.copy(p.world).project(tmpCam); if (v.z > 1) { err += 1e6; continue; } const px = (v.x + 1) / 2 * W, py = (1 - v.y) / 2 * H; err += (px - p.photo[0]) ** 2 + (py - p.photo[1]) ** 2; }
+  return err;
+}
+function nelderMead(f, x0, steps, iters) {
+  const n = x0.length; let simplex = [x0.slice()]; for (let i = 0; i < n; i++) { const x = x0.slice(); x[i] += steps[i]; simplex.push(x); }
+  let vals = simplex.map(f);
+  for (let it = 0; it < iters; it++) {
+    const idx = vals.map((v, i) => i).sort((a, b) => vals[a] - vals[b]); simplex = idx.map(i => simplex[i]); vals = idx.map(i => vals[i]);
+    const c = new Array(n).fill(0); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) c[j] += simplex[i][j] / n;
+    const w = simplex[n]; const refl = c.map((cj, j) => cj + (cj - w[j])); const fr = f(refl);
+    if (fr < vals[0]) { const exp = c.map((cj, j) => cj + 2 * (cj - w[j])); const fe = f(exp); if (fe < fr) { simplex[n] = exp; vals[n] = fe; } else { simplex[n] = refl; vals[n] = fr; } }
+    else if (fr < vals[n - 1]) { simplex[n] = refl; vals[n] = fr; }
+    else { const con = c.map((cj, j) => cj + 0.5 * (w[j] - cj)); const fc = f(con); if (fc < vals[n]) { simplex[n] = con; vals[n] = fc; } else { for (let i = 1; i <= n; i++) { simplex[i] = simplex[i].map((v, j) => simplex[0][j] + 0.5 * (v - simplex[0][j])); vals[i] = f(simplex[i]); } } }
+  }
+  const best = vals.indexOf(Math.min(...vals)); return { x: simplex[best], f: vals[best] };
+}
+function solvePose() {
+  if (pairs.length < 4) { status('対応点が4組以上必要'); return; }
+  const W = +$('shotW').value, H = +$('shotH').value; const s = camState(); const lock = $('lockFocal').checked;
+  const f = (pv) => reproj(lock ? [...pv.slice(0, 6), s.focal] : pv, W, H);
+  // 粗探索：いまの位置の周り（半径40/100m×8方向）× 方位（6通り）× 焦点距離（固定でなければ3通り）
+  const starts = [];
+  const offs = [[0, 0]]; for (const r of [40, 100]) for (let k = 0; k < 8; k++) offs.push([r * Math.cos(k * Math.PI / 4), r * Math.sin(k * Math.PI / 4)]);
+  for (const [dx, dy] of offs) for (const dyaw of [0, 45, -45, 90, -90, 180]) for (const fo of (lock ? [s.focal] : [24, 35, 50]))
+    starts.push([s.x + dx, s.y + dy, s.z, s.yaw + dyaw, s.pitch, 0, fo]);
+  const scored = starts.map(x0 => ({ x0, e: f(lock ? x0.slice(0, 6) : x0) })).sort((a, b) => a.e - b.e).slice(0, 12);
+  let best = null; const steps = lock ? [10, 10, 2, 8, 5, 2] : [10, 10, 2, 8, 5, 2, 6];
+  for (const { x0 } of scored) {
+    const p0 = lock ? x0.slice(0, 6) : x0;
+    let r = nelderMead(f, p0, steps, 2000); r = nelderMead(f, r.x, steps.map(v => v / 4), 1500); r = nelderMead(f, r.x, steps.map(v => v / 20), 800);
+    if (!best || r.f < best.f) best = r;
+  }
+  const pv = lock ? [...best.x, s.focal] : best.x; const rms = Math.sqrt(best.f / pairs.length);
+  setCam({ x: pv[0], y: pv[1], z: pv[2], yaw: ((pv[3] % 360) + 360) % 360, pitch: pv[4], roll: pv[5], focal: Math.round(pv[6] * 10) / 10 });
+  status(`視点を計算した：誤差 ${rms.toFixed(1)} px（写真の画素）。大きければ点を打ち直すか、撮影地点の近くへ移動してから再計算`);
+}
+$('solvePose').onclick = solvePose;
 
 // ---------- 空中写真タイルを地面（dem/tran）に投影
 // 緯度経度 → 平面直角座標第9系 (X北,Y東)。国土地理院の式（GRS80）
@@ -597,8 +673,21 @@ function drawOverlay() {
   const w = ov.width = window.innerWidth, h = ov.height = window.innerHeight;
   octx.clearRect(0, 0, w, h);
   if (photo && $('photoOn').checked) {
-    const sc = (+$('photoScale').value) / 100; let pw = w, ph = w * photo.height / photo.width; if (ph > h) { ph = h; pw = h * photo.width / photo.height; }
-    pw *= sc; ph *= sc; octx.globalAlpha = (+$('photoAlpha').value) / 100; octx.drawImage(photo, (w - pw) / 2, (h - ph) / 2, pw, ph); octx.globalAlpha = 1;
+    const sc = (+$('photoScale').value) / 100; const fr = $('showFrame').checked ? frameRect() : null;
+    let pw, ph; if (fr) { pw = fr.w; ph = fr.h; } else { pw = w; ph = w * photo.height / photo.width; if (ph > h) { ph = h; pw = h * photo.width / photo.height; } }
+    pw *= sc; ph *= sc; octx.globalAlpha = (pick === 'model' ? 0.25 : 1) * (+$('photoAlpha').value) / 100; octx.drawImage(photo, (w - pw) / 2, (h - ph) / 2, pw, ph); octx.globalAlpha = 1;
+  }
+  if (photo && (pairs.length || pendingPhoto)) {
+    const r = frameRect(); const v = new THREE.Vector3();
+    const toS = (pp) => [r.x + pp[0] / photo.width * r.w, r.y + pp[1] / photo.height * r.h];
+    pairs.forEach((p, i) => {
+      const a = toS(p.photo); octx.strokeStyle = '#e00'; octx.lineWidth = 2; octx.beginPath(); octx.arc(a[0], a[1], 7, 0, Math.PI * 2); octx.stroke();
+      v.copy(p.world).project(camera); const b = [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h];
+      octx.strokeStyle = '#06c'; octx.beginPath(); octx.moveTo(b[0] - 8, b[1]); octx.lineTo(b[0] + 8, b[1]); octx.moveTo(b[0], b[1] - 8); octx.lineTo(b[0], b[1] + 8); octx.stroke();
+      octx.strokeStyle = 'rgba(0,0,0,.5)'; octx.setLineDash([4, 4]); octx.beginPath(); octx.moveTo(a[0], a[1]); octx.lineTo(b[0], b[1]); octx.stroke(); octx.setLineDash([]);
+      octx.fillStyle = '#e00'; octx.font = 'bold 13px sans-serif'; octx.fillText(String(i + 1), a[0] + 9, a[1] - 9);
+    });
+    if (pendingPhoto) { const a = toS(pendingPhoto); octx.strokeStyle = '#e00'; octx.lineWidth = 2; octx.beginPath(); octx.arc(a[0], a[1], 7, 0, Math.PI * 2); octx.stroke(); }
   }
   if ($('showFrame').checked) {
     const ar = (+$('shotW').value) / (+$('shotH').value);
@@ -726,7 +815,7 @@ let lastSync = 0; function syncPanelThrottled() { const t = performance.now(); i
 for (const id of ['showTran', 'showBrid', 'showEdges']) $(id).addEventListener('change', () => mmDirty = true);
 
 // ---------- 起動
-window.__dbg_disabled = { camera, orbit, keys, groups, get mode() { return mode; }, step: (dt) => { walkUpdate(dt); if (mode === 'orbit') orbit.update(); } };
+window.__dbg_disabled = { camera, orbit, keys, groups, pairs, solvePose, reproj, nelderMead, setCam, camState, b2t, t2b, groundAt, get mode() { return mode; }, step: (dt) => { walkUpdate(dt); if (mode === 'orbit') orbit.update(); } };
 onResize(); applyFocal();
 (async () => {
   try {
