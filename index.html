@@ -1,0 +1,661 @@
+<!-- no-report-style: 3Dビューアのアプリ UI（読み物ではない） -->
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>渋谷ビューア（漫画背景カメラ）</title>
+<style>
+  :root { --panel: #1b1d22; --fg: #e8e8e8; --muted: #9aa0a6; --acc: #6cb6ff; }
+  html, body { margin: 0; height: 100%; background: #fff; color: var(--fg); font: 13px/1.5 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  #overlay { position: fixed; inset: 0; pointer-events: none; }
+  #panel { position: fixed; top: 0; left: 0; bottom: 0; width: 300px; background: var(--panel); overflow-y: auto; padding: 10px 12px 24px; box-sizing: border-box; box-shadow: 2px 0 8px rgba(0,0,0,.3); transition: transform .2s; }
+  #panel.hidden { transform: translateX(-100%); }
+  #toggle { position: fixed; top: 8px; left: 308px; z-index: 5; background: var(--panel); color: var(--fg); border: 0; border-radius: 4px; padding: 6px 10px; cursor: pointer; transition: left .2s; }
+  #panel.hidden + #toggle { left: 8px; }
+  h1 { font-size: 14px; margin: 4px 0 8px; }
+  h2 { font-size: 12px; margin: 14px 0 6px; color: var(--acc); border-bottom: 1px solid #333; padding-bottom: 2px; }
+  .row { display: flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
+  .row label { color: var(--muted); min-width: 64px; }
+  input[type=number], input[type=text], select { background: #0f1115; color: var(--fg); border: 1px solid #333; border-radius: 3px; padding: 3px 5px; width: 72px; }
+  input[type=text] { width: 140px; }
+  input[type=range] { flex: 1; }
+  button { background: #2b2f38; color: var(--fg); border: 1px solid #444; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+  button:hover { background: #3a3f4a; }
+  button.primary { background: #2a5d8f; border-color: #3b7bbf; }
+  .seg button.on { background: #3b7bbf; }
+  #status { color: var(--muted); font-size: 12px; min-height: 18px; }
+  #presets div { display: flex; gap: 4px; align-items: center; margin: 2px 0; }
+  #presets span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #minimap { position: fixed; right: 10px; bottom: 10px; width: 260px; height: 260px; border: 1px solid #888; background: #fff; cursor: crosshair; }
+  #help { position: fixed; right: 10px; top: 10px; background: rgba(27,29,34,.9); color: var(--fg); padding: 8px 10px; border-radius: 4px; font-size: 12px; max-width: 320px; }
+  kbd { background: #333; padding: 0 4px; border-radius: 3px; font-family: inherit; }
+  .small { font-size: 11px; color: var(--muted); }
+  #pad { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(27,29,34,.85); padding: 8px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; align-items: center; user-select: none; }
+  .padrow { display: flex; gap: 4px; }
+  #pad button { min-width: 84px; padding: 8px 10px; font-size: 13px; touch-action: none; }
+  #pad button:active, #pad button.on { background: #3b7bbf; }
+  #pad .hint { font-size: 11px; color: var(--muted); }
+  #hiddenList div, #boxList div { display: flex; gap: 4px; align-items: center; margin: 2px 0; }
+  #hiddenList span, #boxList span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #view { touch-action: none; }
+  body.editing #view { cursor: crosshair; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="overlay"></canvas>
+<canvas id="minimap" width="520" height="520"></canvas>
+<div id="pad">
+  <div class="padrow"><button data-k="KeyE">上</button><button data-k="KeyW">▲ 進む</button><button data-k="KeyQ">下</button></div>
+  <div class="padrow"><button data-k="KeyA">◀ 左</button><button data-k="KeyS">▼ 戻る</button><button data-k="KeyD">右 ▶</button></div>
+  <div class="padrow"><button data-k="TurnL">↶ 左を向く</button><button data-k="TurnR">右を向く ↷</button></div>
+  <div class="hint">地面をクリック＝そこへ移動／ドラッグ＝見回す／キーボード W A S D も可</div>
+</div>
+<div id="help">
+  <b>操作</b><br>
+  歩き：<b>地面をクリック＝そこへ移動</b>／左ドラッグで見回す／下のボタンか <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> で歩く／<kbd>Q</kbd><kbd>E</kbd>上下／<kbd>Shift</kbd>速く／ホイール＝焦点距離<br>
+  軌道：左ドラッグ回転／右ドラッグ平行移動／ホイール寄る／移動ボタン・WASDも効く<br>
+  ミニマップをクリック＝そこへ移動
+</div>
+<div id="panel">
+  <h1>渋谷ビューア（現況PLATEAU）</h1>
+  <div id="status">読み込み中…</div>
+
+  <h2>モード</h2>
+  <div class="row seg">
+    <button id="modeWalk" class="on">歩き（目線）</button>
+    <button id="modeOrbit">軌道（俯瞰）</button>
+  </div>
+  <div class="row"><label>目線高</label><input id="eyeH" type="number" step="0.1" value="1.6"> m
+    <label style="min-width:auto"><input id="followGround" type="checkbox" checked> 地面追従</label></div>
+  <div class="row"><label>移動速度</label><input id="speed" type="range" min="1" max="60" value="12"><span id="speedV">12</span> m/s</div>
+
+  <h2>カメラ（数値で直接指定できる）</h2>
+  <div class="row"><label>X 東</label><input id="cx" type="number" step="1"> <label>Y 北</label><input id="cy" type="number" step="1"></div>
+  <div class="row"><label>Z 標高</label><input id="cz" type="number" step="0.1"> <span class="small">地面 <span id="gz">-</span> m</span></div>
+  <div class="row"><label>方位</label><input id="yaw" type="number" step="1"> ° <span class="small">0=北 90=東</span></div>
+  <div class="row"><label>仰角</label><input id="pitch" type="number" step="1"> ° <label>ロール</label><input id="roll" type="number" step="1" value="0"> °</div>
+  <div class="row"><label>焦点距離</label><input id="focal" type="number" step="1" value="28"> mm <span class="small">(35mm換算) 画角 <span id="fovV">-</span></span></div>
+  <div class="row"><button id="applyCam" class="primary">適用</button><button id="lookCenter">交差点を向く</button></div>
+
+  <h2>地点へ移動</h2>
+  <div class="row" id="landmarks"></div>
+
+  <h2>表示</h2>
+  <div class="row"><label style="min-width:auto"><input id="showEdges" type="checkbox" checked> 輪郭線</label>
+    <label style="min-width:auto"><input id="showFill" type="checkbox" checked> 面（白）</label>
+    <label style="min-width:auto"><input id="shade" type="checkbox" checked> 陰影</label></div>
+  <div class="row"><label>線の閾値</label><input id="edgeAngle" type="range" min="5" max="89" value="20"><span id="edgeAngleV">20</span>°</div>
+  <div class="row"><label style="min-width:auto"><input id="showTran" type="checkbox" checked> 道路</label>
+    <label style="min-width:auto"><input id="showBrid" type="checkbox" checked> 橋・デッキ</label>
+    <label style="min-width:auto"><input id="showFrn" type="checkbox" checked> 街灯等</label>
+    <label style="min-width:auto"><input id="showDem" type="checkbox" checked> 地形</label></div>
+  <div class="row"><label style="min-width:auto"><input id="showFar" type="checkbox"> 遠景の建物（700m外）</label></div>
+  <div class="row"><label style="min-width:auto"><input id="showTex" type="checkbox"> <b>テクスチャ（写真）</b></label> <span class="small">初回は28MB読み込み</span></div>
+  <div class="row"><label style="min-width:auto"><input id="showHorizon" type="checkbox" checked> アイレベル線</label>
+    <label style="min-width:auto"><input id="showThirds" type="checkbox"> 三分割</label>
+    <label style="min-width:auto"><input id="showFrame" type="checkbox"> 書き出し枠</label></div>
+
+  <h2>2005年化の編集</h2>
+  <div class="row seg"><button id="editDelete">消すモード（建物をクリック）</button></div>
+  <div id="hiddenList" class="small"></div>
+  <div class="row"><b class="small">箱を置く（戻す建物の当たり）</b></div>
+  <div class="row"><input id="bxName" type="text" placeholder="名前（例: 東横店東館）"></div>
+  <div class="row"><label>幅 東西</label><input id="bxW" type="number" value="60"> <label>奥行 南北</label><input id="bxD" type="number" value="30"></div>
+  <div class="row"><label>高さ</label><input id="bxH" type="number" value="30"> <label>回転</label><input id="bxR" type="number" value="0"> °</div>
+  <div class="row"><label>X 東</label><input id="bxX" type="number" value="0"> <label>Y 北</label><input id="bxY" type="number" value="0"></div>
+  <div class="row seg"><button id="editPlace">地面クリックで位置</button><button id="bxAdd" class="primary">追加</button></div>
+  <div id="boxList" class="small"></div>
+  <div class="row"><b class="small">写真を重ねる</b></div>
+  <div class="row"><input id="photoFile" type="file" accept="image/*" style="width:200px"><label style="min-width:auto"><input id="photoOn" type="checkbox" checked> 表示</label></div>
+  <div class="row"><label>不透明度</label><input id="photoAlpha" type="range" min="0" max="100" value="50"><label>拡大</label><input id="photoScale" type="range" min="30" max="200" value="100"></div>
+  <div class="row"><button id="exportEdits">編集をJSON書き出し</button><button id="importEdits">JSON読み込み</button><input id="importEditsFile" type="file" accept="application/json" hidden></div>
+
+  <h2>視点の保存</h2>
+  <div class="row"><input id="presetName" type="text" placeholder="名前（例: ハチ公前→109）"><button id="savePreset">保存</button></div>
+  <div id="presets"></div>
+  <div class="row"><button id="exportPresets">JSON書き出し</button><button id="importPresets">JSON読み込み</button><input id="importFile" type="file" accept="application/json" hidden><button id="copyUrl">URLをコピー</button></div>
+
+  <h2>画像書き出し</h2>
+  <div class="row"><label>幅×高</label><input id="shotW" type="number" value="3000"> × <input id="shotH" type="number" value="2000"></div>
+  <div class="row"><label style="min-width:auto"><input id="shotTransparent" type="checkbox"> 線のみ（透過PNG）</label></div>
+  <div class="row"><button id="shoot" class="primary">PNGを書き出す</button></div>
+  <p class="small">座標＝原点はスクランブル交差点、X東・Y北・Z標高m。</p>
+  <p class="small">出典：3D都市モデル（Project PLATEAU）渋谷区（2025年度）／国土交通省。建物の形・写真はPLATEAUのデータをそのまま表示している（現況。2005年の姿ではない）。</p>
+</div>
+<button id="toggle">☰</button>
+
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './lib/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from './lib/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from './lib/jsm/loaders/DRACOLoader.js';
+
+// ---------- 座標変換：Blender(x東,y北,z上) ↔ three(x, y上, z=-北)
+const b2t = (x, y, z) => new THREE.Vector3(x, z, -y);
+const t2b = (v) => ({ x: v.x, y: -v.z, z: v.y });
+
+// [名前, 立つ位置x, y, (向く先x, y)] 向く先を省略すると交差点
+const LANDMARKS = [
+  ['スクランブル', 0, 0, 32, 38], ['ハチ公前', 9, -51], ['QFRONT前', 32, 38, -177, 16], ['センター街入口', -60, 45, -140, 120],
+  ['109前', -120, 5, -177, 16], ['道玄坂下', -199, -67, -300, -100], ['マークシティ', -136, -134, 0, 0],
+  ['宮益坂下', 245, 43], ['ヒカリエ前', 281, -46], ['スクランブルSQ', 136, -123], ['東急本店', -399, -89, -420, -120],
+];
+
+const $ = (id) => document.getElementById(id);
+const status = (t) => { $('status').textContent = t; };
+
+// ---------- renderer / scene
+const canvas = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0xffffff, 1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.3, 6000);
+camera.rotation.order = 'YXZ';
+const hemi = new THREE.HemisphereLight(0xffffff, 0x777777, 1.6); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(-400, 700, 300); scene.add(sun);
+scene.fog = new THREE.Fog(0xffffff, 250, 2200);
+
+const groups = { bldg: new THREE.Group(), tran: new THREE.Group(), brid: new THREE.Group(), frn: new THREE.Group(), dem: new THREE.Group(), far: new THREE.Group(), tex: new THREE.Group(), boxes: new THREE.Group(), other: new THREE.Group() };
+for (const g of Object.values(groups)) scene.add(g);
+groups.far.visible = false; groups.tex.visible = false;
+// テクスチャ付き建物（nusamai glTF, EPSG:6677 原点そのまま）→ 交差点原点へ平行移動
+groups.tex.position.set(12026.8, 0, -37767.5);
+
+const PO = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+const TONE = { bldg: 0xffffff, brid: 0xd9d9d9, frn: 0x9a9a9a, tran: 0xd0d0d0, dem: 0xe6e6e6, far: 0xffffff, other: 0xffffff };
+const flatMats = {}, shadeMats = {};
+for (const k in TONE) { flatMats[k] = new THREE.MeshBasicMaterial({ color: 0xffffff, ...PO }); shadeMats[k] = new THREE.MeshLambertMaterial({ color: TONE[k], ...PO }); }
+const allMats = [...Object.values(flatMats), ...Object.values(shadeMats)];
+const fillMat = flatMats.bldg, shadeMat = shadeMats.bldg, demMat = flatMats.dem, demShadeMat = shadeMats.dem; // 互換用
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000 });
+
+const meshes = []; // {mesh, edges, kind}
+const groundTargets = [];
+
+function classify(name) {
+  if (name.startsWith('bldg')) return 'bldg';
+  if (name.startsWith('tran')) return 'tran';
+  if (name.startsWith('brid')) return 'brid';
+  if (name.startsWith('frn')) return 'frn';
+  if (name.startsWith('dem')) return 'dem';
+  return 'other';
+}
+
+function buildEdges(rec, angle) {
+  if (rec.edges) { rec.mesh.remove(rec.edges); rec.edges.geometry.dispose(); rec.edges = null; }
+  if (rec.kind === 'dem') return;
+  const eg = new THREE.EdgesGeometry(rec.mesh.geometry, angle);
+  rec.edges = new THREE.LineSegments(eg, edgeMat);
+  rec.edges.visible = $('showEdges').checked;
+  rec.mesh.add(rec.edges);
+}
+
+function addGltf(gltf, isFar) {
+  const list = [];
+  gltf.scene.traverse((o) => { if (o.isMesh) list.push(o); });
+  for (const m of list) {
+    const kind = isFar ? 'far' : classify(m.name);
+    m.material = $('shade').checked ? shadeMats[kind] : flatMats[kind];
+    m.matrixAutoUpdate = false; m.updateMatrix();
+    const rec = { mesh: m, edges: null, kind };
+    meshes.push(rec);
+    groups[kind].add(m);
+    if (kind === 'dem' || kind === 'tran') groundTargets.push(m);
+    if (!isFar) buildEdges(rec, THREE.MathUtils.degToRad(+$('edgeAngle').value));
+  }
+}
+
+const loader = new GLTFLoader();
+const draco = new DRACOLoader(); draco.setDecoderPath('./lib/draco/'); loader.setDRACOLoader(draco);
+function loadGlb(url, isFar) {
+  return new Promise((res, rej) => loader.load(url, (g) => { addGltf(g, isFar); res(); },
+    (ev) => { if (ev.total) status(`${url.split('/').pop()} 読み込み ${Math.round(ev.loaded / ev.total * 100)}%`); }, rej));
+}
+
+// ---------- 地面高（レイキャスト）
+const ray = new THREE.Raycaster();
+const DOWN = new THREE.Vector3(0, -1, 0);
+function groundAt(bx, by) {
+  const tryOne = (x, y) => {
+    ray.set(b2t(x, y, 900), DOWN); ray.far = 2000;
+    const hits = ray.intersectObjects(groundTargets, false);
+    return hits.length ? hits[0].point.y : null;
+  };
+  let z = tryOne(bx, by);
+  let r = 4;
+  while (z === null && r <= 64) {
+    const zs = [];
+    for (let k = 0; k < 8; k++) { const v = tryOne(bx + r * Math.cos(k * Math.PI / 4), by + r * Math.sin(k * Math.PI / 4)); if (v !== null) zs.push(v); }
+    if (zs.length) { zs.sort((a, b) => a - b); z = zs[zs.length >> 1]; }
+    r *= 2;
+  }
+  return z === null ? 15 : z;
+}
+
+// ---------- カメラ状態
+let mode = 'walk';
+const orbit = new OrbitControls(camera, canvas);
+orbit.enabled = false; orbit.enableDamping = true; orbit.screenSpacePanning = false; orbit.maxPolarAngle = Math.PI / 2 - 0.01;
+
+function camState() {
+  const p = t2b(camera.position);
+  const e = camera.rotation; // YXZ
+  const yaw = ((THREE.MathUtils.radToDeg(-e.y)) % 360 + 360) % 360; // three の -Z が方位0=北
+  return { x: p.x, y: p.y, z: p.z, yaw, pitch: THREE.MathUtils.radToDeg(e.x), roll: THREE.MathUtils.radToDeg(e.z), focal: +$('focal').value };
+}
+function setCam(s) {
+  if (s.focal) { $('focal').value = s.focal; applyFocal(); }
+  camera.position.copy(b2t(s.x, s.y, s.z));
+  camera.rotation.set(THREE.MathUtils.degToRad(s.pitch || 0), THREE.MathUtils.degToRad(-(s.yaw || 0)), THREE.MathUtils.degToRad(s.roll || 0), 'YXZ');
+  if (mode === 'orbit') { const t = camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(80).add(camera.position); orbit.target.copy(t); orbit.update(); }
+  syncPanel();
+}
+function applyFocal() {
+  const f = Math.max(8, +$('focal').value || 28);
+  const hfov = 2 * Math.atan(18 / f);
+  const aspect = camera.aspect;
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / aspect));
+  camera.updateProjectionMatrix();
+  $('fovV').textContent = `横${Math.round(THREE.MathUtils.radToDeg(hfov))}°`;
+}
+let syncing = false;
+function syncPanel() {
+  syncing = true;
+  const s = camState();
+  $('cx').value = s.x.toFixed(1); $('cy').value = s.y.toFixed(1); $('cz').value = s.z.toFixed(2);
+  $('yaw').value = Math.round(s.yaw); $('pitch').value = Math.round(s.pitch); $('roll').value = Math.round(s.roll);
+  $('gz').textContent = groundTargets.length ? groundAt(s.x, s.y).toFixed(1) : '-';
+  syncing = false;
+}
+$('applyCam').onclick = () => setCam({ x: +$('cx').value, y: +$('cy').value, z: +$('cz').value, yaw: +$('yaw').value, pitch: +$('pitch').value, roll: +$('roll').value, focal: +$('focal').value });
+$('focal').oninput = () => { applyFocal(); };
+$('lookCenter').onclick = () => { lookAtB(0, 0, null); };
+function lookAtB(bx, by, bz) {
+  const p = t2b(camera.position);
+  const tz = bz ?? (groundAt(bx, by) + 10);
+  const dx = bx - p.x, dy = by - p.y, dz = tz - p.z;
+  if (Math.hypot(dx, dy) < 5) { setCam({ x: p.x, y: p.y, z: p.z, yaw: camState().yaw, pitch: 0, roll: 0 }); return; }
+  const yaw = THREE.MathUtils.radToDeg(Math.atan2(dx, dy));
+  const pitch = THREE.MathUtils.radToDeg(Math.atan2(dz, Math.hypot(dx, dy)));
+  setCam({ x: p.x, y: p.y, z: p.z, yaw, pitch, roll: 0 });
+}
+// 道路（tran）の上でなければ、近くの路上へずらす（建物の中・壁際を避ける）
+function onRoad(bx, by) {
+  ray.set(b2t(bx, by, 900), DOWN); ray.far = 2000;
+  const hits = ray.intersectObjects([...groups.bldg.children, ...groups.tran.children], false);
+  return hits.length > 0 && hits[0].object.name.startsWith('tran');
+}
+function freeSpot(bx, by) {
+  if (onRoad(bx, by)) return [bx, by];
+  for (let r = 5; r <= 150; r += 5) for (let k = 0; k < 24; k++) {
+    const x = bx + r * Math.cos(k * Math.PI / 12), y = by + r * Math.sin(k * Math.PI / 12);
+    if (onRoad(x, y)) return [x, y];
+  }
+  return [bx, by];
+}
+function teleport(bx, by, tx = 0, ty = 0) {
+  [bx, by] = freeSpot(bx, by);
+  const z = groundAt(bx, by) + (+$('eyeH').value || 1.6);
+  const s = camState();
+  setCam({ x: bx, y: by, z, yaw: s.yaw, pitch: s.pitch, roll: 0 });
+  lookAtB(tx, ty, null);
+}
+for (const [name, x, y, tx, ty] of LANDMARKS) {
+  const b = document.createElement('button'); b.textContent = name; b.onclick = () => teleport(x, y, tx ?? 0, ty ?? 0); $('landmarks').appendChild(b);
+}
+
+// ---------- モード
+function setMode(m) {
+  mode = m;
+  $('modeWalk').classList.toggle('on', m === 'walk'); $('modeOrbit').classList.toggle('on', m === 'orbit');
+  orbit.enabled = m === 'orbit';
+  if (m === 'orbit') { const t = camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(120).add(camera.position); orbit.target.copy(t); orbit.update(); }
+}
+$('modeWalk').onclick = () => setMode('walk');
+$('modeOrbit').onclick = () => setMode('orbit');
+
+// ---------- 歩き操作
+const keys = new Set();
+window.addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; keys.add(e.code); if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault(); });
+canvas.tabIndex = 0;
+for (const b of document.querySelectorAll('#pad button')) {
+  const k = b.dataset.k;
+  const on = (e) => { e.preventDefault(); keys.add(k); b.classList.add('on'); };
+  const off = () => { keys.delete(k); b.classList.remove('on'); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+  b.addEventListener('pointermove', (e) => { if (e.buttons === 0) off(); });
+}
+const releasePad = () => { for (const b of document.querySelectorAll('#pad button')) { keys.delete(b.dataset.k); b.classList.remove('on'); } };
+window.addEventListener('pointerup', releasePad); window.addEventListener('blur', releasePad); document.addEventListener('visibilitychange', releasePad);
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, moved = 0;
+canvas.addEventListener('pointerdown', (e) => { canvas.focus(); downX = e.clientX; downY = e.clientY; moved = 0; if (mode !== 'walk' || e.button !== 0) return; dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', (e) => {
+  dragging = false;
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+  const nd = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  ray.setFromCamera(nd, camera); ray.far = 3000;
+  if (editMode === 'delete') {
+    const hits = ray.intersectObjects(groups.bldg.children, false);
+    if (hits.length) hideBuilding(hits[0].object);
+    return;
+  }
+  if (editMode === 'place') {
+    const hits = ray.intersectObjects([...groups.tran.children, ...groups.dem.children], false);
+    if (hits.length) { const p = t2b(hits[0].point); $('bxX').value = p.x.toFixed(0); $('bxY').value = p.y.toFixed(0); status(`箱の位置 X=${p.x.toFixed(0)} Y=${p.y.toFixed(0)}`); if (selectedBox) { selectedBox.x = +$('bxX').value; selectedBox.y = +$('bxY').value; rebuildBox(selectedBox); saveEdits(); } }
+    return;
+  }
+  if (mode !== 'walk') return;
+  // クリック（ドラッグなし）＝地面のその場所へ移動
+  const hits = ray.intersectObjects([...groups.tran.children, ...groups.dem.children, ...groups.brid.children], false);
+  if (hits.length) {
+    const p = t2b(hits[0].point); const s = camState();
+    setCam({ x: p.x, y: p.y, z: p.z + (+$('eyeH').value || 1.6), yaw: s.yaw, pitch: s.pitch, roll: s.roll });
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragging || mode !== 'walk') return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY; moved += Math.abs(dx) + Math.abs(dy);
+  const k = 0.0025 * (28 / Math.max(8, +$('focal').value));
+  camera.rotation.y -= dx * k;
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x - dy * k, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
+  syncPanel();
+});
+canvas.addEventListener('wheel', (e) => {
+  if (mode !== 'walk') return;
+  e.preventDefault();
+  const f = +$('focal').value; $('focal').value = Math.round(THREE.MathUtils.clamp(f * (e.deltaY > 0 ? 0.92 : 1.08), 8, 400)); applyFocal();
+}, { passive: false });
+$('speed').oninput = () => $('speedV').textContent = $('speed').value;
+
+const clock = new THREE.Clock();
+function walkUpdate(dt) {
+  const sp = (+$('speed').value) * (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 3 : 1) * dt;
+  // 「前」＝いまカメラが向いている方向。地面追従ONのときは水平成分だけ使う（高さは地面が決める）
+  const look = camera.getWorldDirection(new THREE.Vector3());
+  const follow = mode === 'walk' && $('followGround').checked;
+  const fwd = follow ? new THREE.Vector3(look.x, 0, look.z).normalize() : look.clone();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  if (right.lengthSq() < 1e-6) right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  const delta = new THREE.Vector3();
+  if (keys.has('KeyW') || keys.has('ArrowUp')) delta.addScaledVector(fwd, sp);
+  if (keys.has('KeyS') || keys.has('ArrowDown')) delta.addScaledVector(fwd, -sp);
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) delta.addScaledVector(right, -sp);
+  if (keys.has('KeyD') || keys.has('ArrowRight')) delta.addScaledVector(right, sp);
+  if (keys.has('KeyQ')) delta.y -= sp;
+  if (keys.has('KeyE')) delta.y += sp;
+  const turn = (keys.has('TurnL') ? 1 : 0) - (keys.has('TurnR') ? 1 : 0);
+  if (turn) {
+    if (mode === 'walk') camera.rotation.y += turn * 1.2 * dt;
+    else { // 軌道：自分の位置を軸に注視点を回す
+      const v = orbit.target.clone().sub(camera.position).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn * 1.2 * dt);
+      orbit.target.copy(camera.position).add(v); orbit.update();
+    }
+    syncPanel();
+  }
+  if (delta.lengthSq() > 0) {
+    camera.position.add(delta);
+    if (mode === 'orbit') orbit.target.add(delta);
+    if (follow && !keys.has('KeyQ') && !keys.has('KeyE')) {
+      const p = t2b(camera.position); camera.position.y = groundAt(p.x, p.y) + (+$('eyeH').value || 1.6);
+    }
+    syncPanel();
+  }
+}
+
+// ---------- 2005年化の編集：消す・箱・写真
+let editMode = null, selectedBox = null;
+const hiddenNames = new Set();
+const boxes = [];
+function setEditMode(m) {
+  editMode = editMode === m ? null : m;
+  $('editDelete').classList.toggle('on', editMode === 'delete'); $('editPlace').classList.toggle('on', editMode === 'place');
+  document.body.classList.toggle('editing', !!editMode);
+  status(editMode === 'delete' ? '消すモード：建物をクリックすると非表示' : editMode === 'place' ? '地面をクリックすると箱の位置が入る' : '');
+}
+$('editDelete').onclick = () => setEditMode('delete');
+$('editPlace').onclick = () => setEditMode('place');
+function hideBuilding(m) { m.visible = false; hiddenNames.add(m.name); renderHidden(); saveEdits(); mmDirty = true; }
+function showBuilding(name) { const m = groups.bldg.children.find((o) => o.name === name); if (m) m.visible = true; hiddenNames.delete(name); renderHidden(); saveEdits(); mmDirty = true; }
+function renderHidden() {
+  const box = $('hiddenList'); box.innerHTML = hiddenNames.size ? `消した建物 ${hiddenNames.size} 棟` : '';
+  for (const n of hiddenNames) { const d = document.createElement('div'); const sp = document.createElement('span'); sp.textContent = n.replace('bldg_', '').slice(0, 8);
+    const m = groups.bldg.children.find((o) => o.name === n); if (m) { const bb = new THREE.Box3().setFromObject(m); sp.textContent += `  高さ${(bb.max.y - bb.min.y).toFixed(0)}m`; }
+    const go = document.createElement('button'); go.textContent = '見る'; go.onclick = () => { if (m) { const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()); const p = t2b(c); const cs = camState(); lookAtB(p.x, p.y, p.z); } };
+    const b = document.createElement('button'); b.textContent = '戻す'; b.onclick = () => showBuilding(n); d.append(sp, go, b); box.appendChild(d); }
+}
+const boxMat = new THREE.MeshLambertMaterial({ color: 0xfff2c8, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+function rebuildBox(b) {
+  if (b.mesh) { groups.boxes.remove(b.mesh); b.mesh.geometry.dispose(); }
+  const g = new THREE.BoxGeometry(b.w, b.h, b.d);
+  const m = new THREE.Mesh(g, boxMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 0.1), edgeMat));
+  const gz = groundAt(b.x, b.y);
+  m.position.copy(b2t(b.x, b.y, gz + b.h / 2)); m.rotation.y = THREE.MathUtils.degToRad(-b.rot);
+  m.name = 'box_' + b.name; b.mesh = m; groups.boxes.add(m); mmDirty = true;
+}
+function readBoxForm() { return { name: $('bxName').value.trim() || `箱${boxes.length + 1}`, w: +$('bxW').value || 10, d: +$('bxD').value || 10, h: +$('bxH').value || 10, rot: +$('bxR').value || 0, x: +$('bxX').value || 0, y: +$('bxY').value || 0 }; }
+function fillBoxForm(b) { $('bxName').value = b.name; $('bxW').value = b.w; $('bxD').value = b.d; $('bxH').value = b.h; $('bxR').value = b.rot; $('bxX').value = b.x; $('bxY').value = b.y; }
+$('bxAdd').onclick = () => {
+  if (selectedBox) { Object.assign(selectedBox, readBoxForm()); rebuildBox(selectedBox); }
+  else { const b = readBoxForm(); boxes.push(b); rebuildBox(b); }
+  selectedBox = null; $('bxAdd').textContent = '追加'; renderBoxes(); saveEdits();
+};
+for (const id of ['bxW', 'bxD', 'bxH', 'bxR', 'bxX', 'bxY']) $(id).addEventListener('input', () => { if (selectedBox) { Object.assign(selectedBox, readBoxForm()); rebuildBox(selectedBox); } });
+function renderBoxes() {
+  const box = $('boxList'); box.innerHTML = boxes.length ? `箱 ${boxes.length} 個` : '';
+  for (const b of boxes) { const d = document.createElement('div'); const sp = document.createElement('span'); sp.textContent = `${b.name} ${b.w}×${b.d}×${b.h}m` + (b === selectedBox ? '（編集中）' : '');
+    const ed = document.createElement('button'); ed.textContent = '編集'; ed.onclick = () => { selectedBox = b; fillBoxForm(b); $('bxAdd').textContent = '更新'; renderBoxes(); };
+    const go = document.createElement('button'); go.textContent = '見る'; go.onclick = () => lookAtB(b.x, b.y, groundAt(b.x, b.y) + b.h / 2);
+    const del = document.createElement('button'); del.textContent = '×'; del.onclick = () => { groups.boxes.remove(b.mesh); boxes.splice(boxes.indexOf(b), 1); if (selectedBox === b) { selectedBox = null; $('bxAdd').textContent = '追加'; } renderBoxes(); saveEdits(); mmDirty = true; };
+    d.append(sp, ed, go, del); box.appendChild(d); }
+}
+const LS_EDITS = 'shibuya_2005_edits';
+function saveEdits() { try { localStorage.setItem(LS_EDITS, JSON.stringify(editsData())); } catch {} }
+function editsData() { return { hidden: [...hiddenNames], boxes: boxes.map(({ name, w, d, h, rot, x, y }) => ({ name, w, d, h, rot, x, y })) }; }
+function applyEdits(data, merge = false) {
+  if (!merge) { for (const n of hiddenNames) { const m = groups.bldg.children.find((o) => o.name === n); if (m) m.visible = true; } hiddenNames.clear(); for (const b of boxes) groups.boxes.remove(b.mesh); boxes.length = 0; }
+  for (const n of data.hidden || []) { const m = groups.bldg.children.find((o) => o.name === n); if (m) { m.visible = false; hiddenNames.add(n); } }
+  for (const b of data.boxes || []) { const nb = { ...b }; boxes.push(nb); rebuildBox(nb); }
+  renderHidden(); renderBoxes(); saveEdits(); mmDirty = true;
+}
+function loadEdits() { try { const d = JSON.parse(localStorage.getItem(LS_EDITS) || 'null'); if (d) applyEdits(d); } catch {} }
+$('exportEdits').onclick = () => { const blob = new Blob([JSON.stringify(editsData(), null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shibuya_2005_edits.json'; a.click(); };
+$('importEdits').onclick = () => $('importEditsFile').click();
+$('importEditsFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; applyEdits(JSON.parse(await f.text()), true); };
+// 写真
+let photo = null;
+$('photoFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { photo = img; }; img.src = URL.createObjectURL(f); };
+
+// ---------- 表示切替
+$('showEdges').onchange = () => { for (const r of meshes) if (r.edges) r.edges.visible = $('showEdges').checked; };
+$('showFill').onchange = () => { for (const m of allMats) m.visible = $('showFill').checked; if ($('showTex').checked) flatMats.bldg.visible = shadeMats.bldg.visible = false; };
+$('shade').onchange = () => {
+  const on = $('shade').checked; hemi.visible = sun.visible = on; scene.fog = on ? new THREE.Fog(0xffffff, 250, 2200) : null;
+  for (const r of meshes) r.mesh.material = on ? shadeMats[r.kind] : flatMats[r.kind];
+};
+let edgeTimer = null;
+$('edgeAngle').oninput = () => { $('edgeAngleV').textContent = $('edgeAngle').value; clearTimeout(edgeTimer); edgeTimer = setTimeout(() => { const a = THREE.MathUtils.degToRad(+$('edgeAngle').value); for (const r of meshes) if (r.kind !== 'far') buildEdges(r, a); }, 400); };
+$('showTran').onchange = () => groups.tran.visible = $('showTran').checked;
+$('showBrid').onchange = () => groups.brid.visible = $('showBrid').checked;
+$('showFrn').onchange = () => groups.frn.visible = $('showFrn').checked;
+$('showDem').onchange = () => groups.dem.visible = $('showDem').checked;
+let texLoaded = false;
+$('showTex').onchange = async () => {
+  const on = $('showTex').checked;
+  if (on && !texLoaded) {
+    texLoaded = true;
+    await new Promise((res, rej) => loader.load('./data/shibuya_tex.glb', (g) => {
+      g.scene.traverse((o) => { if (o.isMesh) { const map = o.material.map || null; if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8; }
+        o.material = new THREE.MeshBasicMaterial({ map, color: map ? 0xffffff : 0xdddddd, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }); } });
+      groups.tex.add(g.scene); res();
+    }, (ev) => { if (ev.total) status(`テクスチャ 読み込み ${Math.round(ev.loaded / ev.total * 100)}%`); }, rej));
+    status('テクスチャを読み込んだ');
+  }
+  groups.tex.visible = on;
+  // 白い建物の面はテクスチャの下に隠す（輪郭線は残す）
+  flatMats.bldg.visible = shadeMats.bldg.visible = !on && $('showFill').checked;
+};
+let farLoaded = false;
+$('showFar').onchange = async () => {
+  groups.far.visible = $('showFar').checked;
+  if ($('showFar').checked && !farLoaded) { farLoaded = true; await loadGlb('./data/shibuya_far.glb', true); status('遠景を読み込んだ'); }
+};
+$('toggle').onclick = () => $('panel').classList.toggle('hidden');
+
+// ---------- オーバーレイ（アイレベル線・三分割・書き出し枠）
+const ov = $('overlay'); const octx = ov.getContext('2d');
+function drawOverlay() {
+  const w = ov.width = window.innerWidth, h = ov.height = window.innerHeight;
+  octx.clearRect(0, 0, w, h);
+  if (photo && $('photoOn').checked) {
+    const sc = (+$('photoScale').value) / 100; let pw = w, ph = w * photo.height / photo.width; if (ph > h) { ph = h; pw = h * photo.width / photo.height; }
+    pw *= sc; ph *= sc; octx.globalAlpha = (+$('photoAlpha').value) / 100; octx.drawImage(photo, (w - pw) / 2, (h - ph) / 2, pw, ph); octx.globalAlpha = 1;
+  }
+  if ($('showFrame').checked) {
+    const ar = (+$('shotW').value) / (+$('shotH').value);
+    let fw = w, fh = w / ar; if (fh > h) { fh = h; fw = h * ar; }
+    const fx = (w - fw) / 2, fy = (h - fh) / 2;
+    octx.fillStyle = 'rgba(0,0,0,.35)'; octx.fillRect(0, 0, w, fy); octx.fillRect(0, fy + fh, w, h - fy - fh); octx.fillRect(0, fy, fx, fh); octx.fillRect(fx + fw, fy, w - fx - fw, fh);
+    if ($('showThirds').checked) {
+      octx.strokeStyle = 'rgba(0,120,255,.5)'; octx.lineWidth = 1; octx.beginPath();
+      for (let i = 1; i < 3; i++) { octx.moveTo(fx + fw * i / 3, fy); octx.lineTo(fx + fw * i / 3, fy + fh); octx.moveTo(fx, fy + fh * i / 3); octx.lineTo(fx + fw, fy + fh * i / 3); }
+      octx.stroke();
+    }
+  } else if ($('showThirds').checked) {
+    octx.strokeStyle = 'rgba(0,120,255,.5)'; octx.lineWidth = 1; octx.beginPath();
+    for (let i = 1; i < 3; i++) { octx.moveTo(w * i / 3, 0); octx.lineTo(w * i / 3, h); octx.moveTo(0, h * i / 3); octx.lineTo(w, h * i / 3); }
+    octx.stroke();
+  }
+  if ($('showHorizon').checked) {
+    // カメラと同じ高さの無限遠点 → 画面上のアイレベル
+    const fwd = camera.getWorldDirection(new THREE.Vector3()); fwd.y = 0;
+    if (fwd.lengthSq() > 1e-6) {
+      fwd.normalize();
+      const p1 = camera.position.clone().addScaledVector(fwd, 5000);
+      const left = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd).normalize();
+      const p0 = p1.clone().addScaledVector(left, 4000), p2 = p1.clone().addScaledVector(left, -4000);
+      const toS = (p) => { const v = p.project(camera); return v.z < 1 ? [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h] : null; };
+      const a = toS(p0), b = toS(p2);
+      if (a && b) { octx.strokeStyle = 'rgba(220,0,0,.8)'; octx.lineWidth = 1; octx.setLineDash([8, 6]); octx.beginPath(); octx.moveTo(a[0], a[1]); octx.lineTo(b[0], b[1]); octx.stroke(); octx.setLineDash([]);
+        octx.fillStyle = 'rgba(220,0,0,.9)'; octx.font = '12px sans-serif'; octx.fillText('アイレベル', Math.min(a[0], b[0]) + 320, (a[1] + b[1]) / 2 - 4); }
+    }
+  }
+}
+
+// ---------- ミニマップ（真上オルソ）
+const mm = $('minimap'); const mctx = mm.getContext('2d');
+const mmCam = new THREE.OrthographicCamera(-600, 600, 600, -600, 1, 3000); mmCam.position.set(0, 1500, 0); mmCam.up.set(0, 0, -1); mmCam.lookAt(0, 0, 0);
+const mmRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); mmRenderer.setSize(520, 520); mmRenderer.setClearColor(0xffffff, 1);
+let mmDirty = true;
+function renderMinimap() {
+  if (mmDirty) {
+    const vis = [groups.frn.visible, groups.dem.visible, groups.far.visible]; groups.frn.visible = false; groups.dem.visible = false; groups.far.visible = false; groups.tex.visible = false;
+// テクスチャ付き建物（nusamai glTF, EPSG:6677 原点そのまま）→ 交差点原点へ平行移動
+groups.tex.position.set(12026.8, 0, -37767.5);
+    const ev = $('showEdges').checked; for (const r of meshes) if (r.edges) r.edges.visible = true;
+    mmRenderer.render(scene, mmCam);
+    for (const r of meshes) if (r.edges) r.edges.visible = ev;
+    [groups.frn.visible, groups.dem.visible, groups.far.visible] = vis;
+    mmDirty = false;
+  }
+  mctx.clearRect(0, 0, 520, 520); mctx.drawImage(mmRenderer.domElement, 0, 0);
+  const p = t2b(camera.position); const sx = (x) => (x + 600) / 1200 * 520, sy = (y) => (600 - y) / 1200 * 520;
+  const s = camState(); const yaw = THREE.MathUtils.degToRad(s.yaw); const hf = Math.atan(18 / Math.max(8, s.focal));
+  mctx.fillStyle = 'rgba(0,120,255,.25)'; mctx.beginPath(); mctx.moveTo(sx(p.x), sy(p.y));
+  for (const a of [yaw - hf, yaw + hf]) mctx.lineTo(sx(p.x + Math.sin(a) * 400), sy(p.y + Math.cos(a) * 400)); mctx.closePath(); mctx.fill();
+  mctx.fillStyle = '#d00'; mctx.beginPath(); mctx.arc(sx(p.x), sy(p.y), 5, 0, Math.PI * 2); mctx.fill();
+  mctx.fillStyle = '#333'; mctx.font = '11px sans-serif';
+  for (const [n, x, y] of LANDMARKS) { mctx.fillRect(sx(x) - 2, sy(y) - 2, 4, 4); mctx.fillText(n, sx(x) + 4, sy(y) - 3); }
+}
+mm.addEventListener('click', (e) => {
+  const r = mm.getBoundingClientRect(); const u = (e.clientX - r.left) / r.width, v = (e.clientY - r.top) / r.height;
+  let bx = u * 1200 - 600, by = 600 - v * 1200;
+  if (mode === 'walk') [bx, by] = freeSpot(bx, by);
+  const s = camState(); const z = mode === 'walk' && $('followGround').checked ? groundAt(bx, by) + (+$('eyeH').value || 1.6) : s.z;
+  setCam({ x: bx, y: by, z, yaw: s.yaw, pitch: s.pitch, roll: s.roll });
+});
+
+// ---------- プリセット
+const LS = 'shibuya_viewer_presets';
+function loadPresets() { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } }
+function savePresets(list) { try { localStorage.setItem(LS, JSON.stringify(list)); } catch {} renderPresets(); }
+function renderPresets() {
+  const box = $('presets'); box.innerHTML = '';
+  for (const [i, p] of loadPresets().entries()) {
+    const d = document.createElement('div');
+    const sp = document.createElement('span'); sp.textContent = p.name; sp.title = JSON.stringify(p.cam);
+    const go = document.createElement('button'); go.textContent = '移動'; go.onclick = () => setCam(p.cam);
+    const del = document.createElement('button'); del.textContent = '×'; del.onclick = () => { const l = loadPresets(); l.splice(i, 1); savePresets(l); };
+    d.append(sp, go, del); box.appendChild(d);
+  }
+}
+$('savePreset').onclick = () => { const name = $('presetName').value.trim() || `視点${loadPresets().length + 1}`; const l = loadPresets(); l.push({ name, cam: camState() }); savePresets(l); $('presetName').value = ''; };
+$('exportPresets').onclick = () => { const blob = new Blob([JSON.stringify(loadPresets(), null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shibuya_viewpoints.json'; a.click(); };
+$('importPresets').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const l = JSON.parse(await f.text()); savePresets(loadPresets().concat(l)); };
+$('copyUrl').onclick = () => { const s = camState(); const h = Object.entries(s).map(([k, v]) => `${k}=${(+v).toFixed(2)}`).join('&'); const u = location.origin + location.pathname + '#' + h; navigator.clipboard?.writeText(u); status('URLをコピーした: ' + u); };
+function readHash() {
+  if (!location.hash) return false;
+  const s = {}; for (const kv of location.hash.slice(1).split('&')) { const [k, v] = kv.split('='); s[k] = +v; }
+  if (Number.isFinite(s.x)) { setCam(s); return true; }
+  return false;
+}
+
+// ---------- 書き出し
+$('shoot').onclick = () => {
+  const W = +$('shotW').value || 3000, H = +$('shotH').value || 2000;
+  const transparent = $('shotTransparent').checked;
+  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize); const oldPR = renderer.getPixelRatio();
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  camera.aspect = W / H; applyFocal();
+  if (transparent) { renderer.setClearColor(0xffffff, 0); for (const m of allMats) m.colorWrite = false; }
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  if (transparent) { renderer.setClearColor(0xffffff, 1); for (const m of allMats) m.colorWrite = true; }
+  renderer.setPixelRatio(oldPR); renderer.setSize(oldSize.x, oldSize.y, false); onResize();
+  const s = camState(); const a = document.createElement('a'); a.href = url;
+  a.download = `shibuya_x${s.x.toFixed(0)}_y${s.y.toFixed(0)}_yaw${Math.round(s.yaw)}_f${s.focal}.png`; a.click();
+  status(`書き出した ${W}×${H}`);
+};
+
+// ---------- ループ
+function onResize() {
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.aspect = window.innerWidth / window.innerHeight; applyFocal();
+}
+window.addEventListener('resize', onResize);
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  walkUpdate(dt);
+  if (mode === 'orbit') { orbit.update(); syncPanelThrottled(); }
+  renderer.render(scene, camera);
+  drawOverlay();
+  renderMinimap();
+  requestAnimationFrame(loop);
+}
+let lastSync = 0; function syncPanelThrottled() { const t = performance.now(); if (t - lastSync > 200) { lastSync = t; syncPanel(); } }
+for (const id of ['showTran', 'showBrid', 'showEdges']) $(id).addEventListener('change', () => mmDirty = true);
+
+// ---------- 起動
+window.__dbg_disabled = { camera, orbit, keys, groups, get mode() { return mode; }, step: (dt) => { walkUpdate(dt); if (mode === 'orbit') orbit.update(); } };
+onResize(); applyFocal();
+(async () => {
+  try {
+    await loadGlb('./data/shibuya_near.glb', false);
+    status(`読み込み完了：${meshes.length} オブジェクト`);
+    mmDirty = true;
+    loadEdits();
+    if (!readHash()) teleport(9, -51); // ハチ公前から交差点を向く
+    loop(); renderPresets();
+  } catch (e) { status('読み込み失敗: ' + e.message + '（start.command でサーバを起動してから開く）'); console.error(e); }
+})();
+</script>
+</body>
+</html>
