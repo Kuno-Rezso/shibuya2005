@@ -119,6 +119,8 @@
       <option value="seamlessphoto|18">現在（最新）</option></select></div>
   <div class="row"><label>不透明度</label><input id="aerialAlpha" type="range" min="0" max="100" value="85"><label style="min-width:auto"><input id="aerialHideBldg" type="checkbox"> 建物を消して見る</label></div>
   <div class="row"><b class="small">写真を重ねる</b></div>
+  <div class="row"><select id="refPhoto" style="width:270px"><option value="">参照写真（2003〜2008年、出典つき）を選ぶ</option></select></div>
+  <div id="refPhotoInfo" class="small"></div>
   <div class="row"><input id="photoFile" type="file" accept="image/*" style="width:200px"><label style="min-width:auto"><input id="photoOn" type="checkbox" checked> 表示</label></div>
   <div class="row"><label>不透明度</label><input id="photoAlpha" type="range" min="0" max="100" value="50"><label>拡大</label><input id="photoScale" type="range" min="30" max="200" value="100"></div>
   <div class="row"><b class="small">写真から視点を合わせる（対応点）</b></div>
@@ -495,6 +497,15 @@ $('importEditsFile').onchange = async (e) => { const f = e.target.files[0]; if (
 // 写真
 let photo = null;
 $('photoFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { photo = img; $('shotW').value = img.width; $('shotH').value = img.height; $('showFrame').checked = true; status(`写真 ${img.width}×${img.height}。書き出し枠を写真に合わせた`); }; img.src = URL.createObjectURL(f); };
+// 同梱の参照写真（Wikimedia Commons、CC）。選ぶと重ね表示＋推定撮影位置へ移動
+let refPhotos = [];
+fetch('./data/photos/index.json').then(r => r.json()).then(list => { refPhotos = list; for (const [i, p] of list.entries()) { const o = document.createElement('option'); o.value = i; o.textContent = `${p.date} ${p.use}`; $('refPhoto').appendChild(o); } }).catch(() => {});
+$('refPhoto').onchange = () => {
+  const p = refPhotos[+$('refPhoto').value]; if (!p) { $('refPhotoInfo').textContent = ''; return; }
+  const img = new Image(); img.onload = () => { photo = img; $('shotW').value = img.width; $('shotH').value = img.height; $('showFrame').checked = true; $('photoOn').checked = true; setCam(p.cam); status('参照写真を重ねた。ずれは「写真から視点を合わせる」で詰める'); };
+  img.src = './' + p.file;
+  $('refPhotoInfo').innerHTML = `${p.desc}<br>撮影 ${p.date}／${p.artist}／${p.license}／<a href="${p.page}" target="_blank" style="color:#6cb6ff">元ページ</a>`;
+};
 // ---- 対応点でカメラを解く
 const pairs = []; let pick = null; let pendingPhoto = null;
 function frameRect() { const w = window.innerWidth, h = window.innerHeight; const ar = (+$('shotW').value) / (+$('shotH').value); let fw = w, fh = w / ar; if (fh > h) { fh = h; fw = h * ar; } return { x: (w - fw) / 2, y: (h - fh) / 2, w: fw, h: fh }; }

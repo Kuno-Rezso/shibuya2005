@@ -1,0 +1,257 @@
+[
+ {
+  "file": "data/photos/01_View_from_Roof_of_Tokyu_Store_-_panoramio.jpg",
+  "desc": "東横店西館の屋上から東を見下ろす。銀座線の高架、東口バスターミナル、東急文化会館跡の更地（副都心線工事ヤード）",
+  "use": "B/E 東館・東口・文化会館跡",
+  "cam": {
+   "x": 39,
+   "y": -83,
+   "z": 62,
+   "yaw": 80,
+   "pitch": -25,
+   "focal": 28
+  },
+  "date": "Taken on 9",
+  "artist": "heiwa4126",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:View_from_Roof_of_Tokyu_Store_-_panoramio.jpg"
+ },
+ {
+  "file": "data/photos/05_ShibuyaStation.jpg",
+  "desc": "南西の高所（セルリアンタワー付近）から駅全景。東横線のかまぼこ屋根4連、首都高、東館",
+  "use": "E 全景・ホーム屋根",
+  "cam": {
+   "x": -84,
+   "y": -342,
+   "z": 150,
+   "yaw": 28,
+   "pitch": -20,
+   "focal": 35
+  },
+  "date": "",
+  "artist": "Shiodome",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:ShibuyaStation.JPG"
+ },
+ {
+  "file": "data/photos/13_Tokyo__Japan__14811417582_.jpg",
+  "desc": "ハチ公前広場から東横店西館の正面（青ガエルは2006年10月以降なので2005年には無い）",
+  "use": "B 西館の正面・高さ",
+  "cam": {
+   "x": 9,
+   "y": -45,
+   "z": 17,
+   "yaw": 170,
+   "pitch": 8,
+   "focal": 28
+  },
+  "date": "16 Decembe",
+  "artist": "Dennis Keller",
+  "license": "CC BY 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Tokyo%2C_Japan_%2814811417582%29.jpg"
+ },
+ {
+  "file": "data/photos/16_Shibuya_Station_West_Exit_Bus_terminal.jpg",
+  "desc": "西口バスターミナルから東横店西館（曲面の白い塔）と南館（格子の壁）",
+  "use": "B/C 西館・南館の形",
+  "cam": {
+   "x": -45,
+   "y": -150,
+   "z": 19,
+   "yaw": 45,
+   "pitch": 8,
+   "focal": 28
+  },
+  "date": "Taken on 9",
+  "artist": "Ons",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya_Station_West_Exit_Bus_terminal.jpg"
+ },
+ {
+  "file": "data/photos/20_Tokyu_Toyoko_Department_Store2.jpg",
+  "desc": "西口歩道橋の高さから西館・南館（2008年、2005年と同じ姿）",
+  "use": "B/C 西館・南館",
+  "cam": {
+   "x": -40,
+   "y": -160,
+   "z": 22,
+   "yaw": 50,
+   "pitch": 5,
+   "focal": 35
+  },
+  "date": "2008-03-30",
+  "artist": "本屋",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Tokyu_Toyoko_Department_Store2.JPG"
+ },
+ {
+  "file": "data/photos/22_Shibuya_Station1.jpg",
+  "desc": "西口から西館・南館・玉川通りの高架（2008年）",
+  "use": "B/C 西館・南館",
+  "cam": {
+   "x": -30,
+   "y": -145,
+   "z": 19,
+   "yaw": 40,
+   "pitch": 6,
+   "focal": 28
+  },
+  "date": "Taken on 3",
+  "artist": "本屋",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya_Station1.JPG"
+ },
+ {
+  "file": "data/photos/19_Tokyu-Toyoko_East_West.jpg",
+  "desc": "東口側から東館（TOKYUの看板）と西館の広告壁（2008年）",
+  "use": "B 東館の正面",
+  "cam": {
+   "x": 205,
+   "y": -40,
+   "z": 17,
+   "yaw": 245,
+   "pitch": 8,
+   "focal": 35
+  },
+  "date": "2008-05-05",
+  "artist": "ITA-ATU",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Tokyu-Toyoko_East%26West.jpg"
+ },
+ {
+  "file": "data/photos/21_TKK_Tōyoko_Shibuya_station.jpg",
+  "desc": "東口バスターミナルから東横線渋谷駅の正面。かまぼこ屋根が5連に見える（2008年）",
+  "use": "B ホーム屋根の形",
+  "cam": {
+   "x": 200,
+   "y": -125,
+   "z": 17,
+   "yaw": 240,
+   "pitch": 6,
+   "focal": 28
+  },
+  "date": "",
+  "artist": "",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:TKK_T%C5%8Dyoko_Shibuya_station.JPG"
+ },
+ {
+  "file": "data/photos/24_ShibuyaEastExit2005-5.jpg",
+  "desc": "明治通り側から東横線駅舎と東館（2005年5月）",
+  "use": "B 駅舎・東館（2005年そのもの）",
+  "cam": {
+   "x": 195,
+   "y": -25,
+   "z": 17,
+   "yaw": 195,
+   "pitch": 8,
+   "focal": 28
+  },
+  "date": "",
+  "artist": "",
+  "license": "CC BY-SA 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:ShibuyaEastExit2005-5.jpg"
+ },
+ {
+  "file": "data/photos/09_Shibuya01s3200.jpg",
+  "desc": "交差点の109側から北東（センター街入口・大盛堂・109-②のビジョン）2007年",
+  "use": "A 交差点北側の看板と建物",
+  "cam": {
+   "x": -70,
+   "y": -15,
+   "z": 17,
+   "yaw": 40,
+   "pitch": 6,
+   "focal": 35
+  },
+  "date": "2007-03-26",
+  "artist": "663highland",
+  "license": "CC BY 2.5",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya01s3200.jpg"
+ },
+ {
+  "file": "data/photos/10_Shibuya02s3200.jpg",
+  "desc": "交差点の南西角からQFRONT・センター街入口方向 2007年",
+  "use": "A 交差点・QFRONT",
+  "cam": {
+   "x": -40,
+   "y": -30,
+   "z": 17,
+   "yaw": 25,
+   "pitch": 8,
+   "focal": 28
+  },
+  "date": "2007-03-26",
+  "artist": "663highland",
+  "license": "CC BY 2.5",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya02s3200.jpg"
+ },
+ {
+  "file": "data/photos/04_抱いてセニョリータ_2006__150731014_.jpg",
+  "desc": "駅側（西館の連絡通路）から交差点と109-②を見下ろす（2006年）",
+  "use": "A 交差点の俯瞰・109-②",
+  "cam": {
+   "x": 40,
+   "y": -65,
+   "z": 24,
+   "yaw": 320,
+   "pitch": -10,
+   "focal": 28
+  },
+  "date": "2006-05-19",
+  "artist": "neepster",
+  "license": "CC BY-SA 2.0",
+  "page": "https://commons.wikimedia.org/wiki/File:%E6%8A%B1%E3%81%84%E3%81%A6%E3%82%BB%E3%83%8B%E3%83%A7%E3%83%AA%E3%83%BC%E3%82%BF_2006_%28150731014%29.jpg"
+ },
+ {
+  "file": "data/photos/08_Shibuya-crossing.jpg",
+  "desc": "交差点からQFRONT側の大型ビジョン群（2005年4月）",
+  "use": "A ビジョン群",
+  "cam": {
+   "x": -10,
+   "y": -25,
+   "z": 17,
+   "yaw": 15,
+   "pitch": 10,
+   "focal": 28
+  },
+  "date": "2005-04",
+  "artist": ":en:User:(WT-en) Paul Richter",
+  "license": "CC BY-SA 4.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya-crossing.jpg"
+ },
+ {
+  "file": "data/photos/06_Shibuya_Tokyu_Bunka_Kaikan_2003.jpg",
+  "desc": "東急文化会館（2003年6月、閉館直前）。2005年には無い建物",
+  "use": "B 参考（2005年は更地）",
+  "cam": {
+   "x": 230,
+   "y": -20,
+   "z": 17,
+   "yaw": 110,
+   "pitch": 12,
+   "focal": 28
+  },
+  "date": "Taken on 2",
+  "artist": "ja:利用者:imtn",
+  "license": "CC BY-SA 2.5",
+  "page": "https://commons.wikimedia.org/wiki/File:Shibuya_Tokyu_Bunka_Kaikan_2003.jpg"
+ },
+ {
+  "file": "data/photos/23_Tokyu_Bunka_Kaikan_2006_Tokyo.jpg",
+  "desc": "東急文化会館とプラネタリウムのドーム（年は要確認。文化会館は2003年解体なので2003年以前）",
+  "use": "B 参考",
+  "cam": {
+   "x": 40,
+   "y": -70,
+   "z": 40,
+   "yaw": 75,
+   "pitch": -15,
+   "focal": 35
+  },
+  "date": "1 June 200",
+  "artist": "Shiodome at Japanese Wikipedia",
+  "license": "CC BY 3.0",
+  "page": "https://commons.wikimedia.org/wiki/File:Tokyu_Bunka_Kaikan_2006_Tokyo.jpg"
+ }
+]
