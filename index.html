@@ -107,6 +107,8 @@
   <div class="row"><input id="bxName" type="text" placeholder="名前（例: 東横店東館）"></div>
   <div class="row"><label>幅 東西</label><input id="bxW" type="number" value="60"> <label>奥行 南北</label><input id="bxD" type="number" value="30"></div>
   <div class="row"><label>高さ</label><input id="bxH" type="number" value="30"> <label>回転</label><input id="bxR" type="number" value="0"> °</div>
+  <div class="row"><label>形</label><select id="bxType" style="width:120px"><option value="box">箱</option><option value="cyl">円筒（楕円柱）</option><option value="vault">かまぼこ屋根</option><option value="sign">屋上看板（薄い板）</option></select>
+    <label>アーチ数</label><input id="bxN" type="number" value="5" style="width:50px"> <label>基部高</label><input id="bxHb" type="number" value="8" style="width:50px"></div>
   <div class="row"><label>X 東</label><input id="bxX" type="number" value="0"> <label>Y 北</label><input id="bxY" type="number" value="0"></div>
   <div class="row seg"><button id="editPlace">地面クリックで位置</button><button id="bxAdd" class="primary">追加</button></div>
   <div id="boxList" class="small"></div>
@@ -451,25 +453,51 @@ function renderHidden() {
     const b = document.createElement('button'); b.textContent = '戻す'; b.onclick = () => showBuilding(n); d.append(sp, go, b); box.appendChild(d); }
 }
 const boxMat = new THREE.MeshLambertMaterial({ color: 0xfff2c8, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+function shapeGeometry(b) {
+  // ローカル：x=幅(東西・回転前), y=上, z=奥行(南北)。底面 y=0
+  const t = b.type || 'box';
+  if (t === 'cyl') { const g = new THREE.CylinderGeometry(0.5, 0.5, b.h, 48); g.scale(b.w, 1, b.d); g.translate(0, b.h / 2, 0); return g; }
+  if (t === 'sign') { const g = new THREE.BoxGeometry(b.w, b.h, Math.max(0.5, b.d)); g.translate(0, b.h / 2, 0); return g; }
+  if (t === 'vault') {
+    const n = Math.max(1, Math.round(b.n || 1)), hb = Math.max(0, b.hb || 0), r = b.w / (2 * n);
+    const parts = [];
+    if (hb > 0) { const base = new THREE.BoxGeometry(b.w, hb, b.d); base.translate(0, hb / 2, 0); parts.push(base); }
+    for (let i = 0; i < n; i++) {
+      const arch = new THREE.CylinderGeometry(r, r, b.d, 24, 1, false, 0, Math.PI); // 上半分
+      arch.rotateZ(Math.PI / 2); arch.rotateY(Math.PI / 2); // 軸を z（奥行）方向へ、開口を下向きに
+      arch.translate(-b.w / 2 + r + 2 * r * i, hb, 0);
+      const cap = new THREE.CylinderGeometry(r, r, b.d, 24, 1, true, 0, Math.PI); // 端面用は省略、側面のみ
+      parts.push(arch);
+    }
+    return mergeGeoms(parts);
+  }
+  const g = new THREE.BoxGeometry(b.w, b.h, b.d); g.translate(0, b.h / 2, 0); return g;
+}
+function mergeGeoms(gs) {
+  // 位置だけの単純結合（インデックス無し化）
+  const arrs = gs.map(g => g.toNonIndexed().attributes.position.array); const n = arrs.reduce((a, x) => a + x.length, 0);
+  const pos = new Float32Array(n); let o = 0; for (const a of arrs) { pos.set(a, o); o += a.length; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.computeVertexNormals(); return g;
+}
 function rebuildBox(b) {
   if (b.mesh) { groups.boxes.remove(b.mesh); b.mesh.geometry.dispose(); }
-  const g = new THREE.BoxGeometry(b.w, b.h, b.d);
-  const m = new THREE.Mesh(g, boxMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 0.1), edgeMat));
+  const g = shapeGeometry(b);
+  const m = new THREE.Mesh(g, boxMat); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, b.type === 'vault' || b.type === 'cyl' ? 0.6 : 0.1), edgeMat));
   const gz = groundAt(b.x, b.y);
-  m.position.copy(b2t(b.x, b.y, gz + b.h / 2)); m.rotation.y = THREE.MathUtils.degToRad(-b.rot);
+  m.position.copy(b2t(b.x, b.y, gz + (b.z || 0))); m.rotation.y = THREE.MathUtils.degToRad(-b.rot);
   m.name = 'box_' + b.name; b.mesh = m; groups.boxes.add(m); mmDirty = true;
 }
-function readBoxForm() { return { name: $('bxName').value.trim() || `箱${boxes.length + 1}`, w: +$('bxW').value || 10, d: +$('bxD').value || 10, h: +$('bxH').value || 10, rot: +$('bxR').value || 0, x: +$('bxX').value || 0, y: +$('bxY').value || 0 }; }
-function fillBoxForm(b) { $('bxName').value = b.name; $('bxW').value = b.w; $('bxD').value = b.d; $('bxH').value = b.h; $('bxR').value = b.rot; $('bxX').value = b.x; $('bxY').value = b.y; }
+function readBoxForm() { return { name: $('bxName').value.trim() || `箱${boxes.length + 1}`, w: +$('bxW').value || 10, d: +$('bxD').value || 10, h: +$('bxH').value || 10, rot: +$('bxR').value || 0, x: +$('bxX').value || 0, y: +$('bxY').value || 0, type: $('bxType').value, n: +$('bxN').value || 1, hb: +$('bxHb').value || 0 }; }
+function fillBoxForm(b) { $('bxName').value = b.name; $('bxW').value = b.w; $('bxD').value = b.d; $('bxH').value = b.h; $('bxR').value = b.rot; $('bxX').value = b.x; $('bxY').value = b.y; $('bxType').value = b.type || 'box'; $('bxN').value = b.n || 1; $('bxHb').value = b.hb || 0; }
 $('bxAdd').onclick = () => {
   if (selectedBox) { Object.assign(selectedBox, readBoxForm()); rebuildBox(selectedBox); }
   else { const b = readBoxForm(); boxes.push(b); rebuildBox(b); }
   selectedBox = null; $('bxAdd').textContent = '追加'; renderBoxes(); saveEdits();
 };
-for (const id of ['bxW', 'bxD', 'bxH', 'bxR', 'bxX', 'bxY']) $(id).addEventListener('input', () => { if (selectedBox) { Object.assign(selectedBox, readBoxForm()); rebuildBox(selectedBox); } });
+for (const id of ['bxW', 'bxD', 'bxH', 'bxR', 'bxX', 'bxY', 'bxType', 'bxN', 'bxHb']) $(id).addEventListener('input', () => { if (selectedBox) { Object.assign(selectedBox, readBoxForm()); rebuildBox(selectedBox); } });
 function renderBoxes() {
   const box = $('boxList'); box.innerHTML = boxes.length ? `箱 ${boxes.length} 個` : '';
-  for (const b of boxes) { const d = document.createElement('div'); const sp = document.createElement('span'); sp.textContent = `${b.name} ${b.w}×${b.d}×${b.h}m` + (b === selectedBox ? '（編集中）' : '');
+  for (const b of boxes) { const d = document.createElement('div'); const sp = document.createElement('span'); sp.textContent = `${b.name} ${b.w}×${b.d}×${b.h}m${b.type && b.type !== 'box' ? '・' + ({cyl:'円筒',vault:'かまぼこ',sign:'看板'})[b.type] : ''}` + (b === selectedBox ? '（編集中）' : '');
     const ed = document.createElement('button'); ed.textContent = '編集'; ed.onclick = () => { selectedBox = b; fillBoxForm(b); $('bxAdd').textContent = '更新'; renderBoxes(); };
     const go = document.createElement('button'); go.textContent = '見る'; go.onclick = () => lookAtB(b.x, b.y, groundAt(b.x, b.y) + b.h / 2);
     const del = document.createElement('button'); del.textContent = '×'; del.onclick = () => { groups.boxes.remove(b.mesh); boxes.splice(boxes.indexOf(b), 1); if (selectedBox === b) { selectedBox = null; $('bxAdd').textContent = '追加'; } renderBoxes(); saveEdits(); mmDirty = true; };
@@ -477,7 +505,7 @@ function renderBoxes() {
 }
 const LS_EDITS = 'shibuya_2005_edits';
 function saveEdits() { try { localStorage.setItem(LS_EDITS, JSON.stringify(editsData())); } catch {} }
-function editsData() { return { hidden: [...hiddenNames], boxes: boxes.map(({ name, w, d, h, rot, x, y }) => ({ name, w, d, h, rot, x, y })) }; }
+function editsData() { return { hidden: [...hiddenNames], boxes: boxes.map(({ name, w, d, h, rot, x, y, type, n, hb, z, note }) => ({ name, w, d, h, rot, x, y, type, n, hb, z, note })) }; }
 function applyEdits(data, merge = false) {
   if (!merge) { for (const n of hiddenNames) { const m = groups.bldg.children.find((o) => o.name === n); if (m) m.visible = true; } hiddenNames.clear(); for (const b of boxes) groups.boxes.remove(b.mesh); boxes.length = 0; }
   for (const n of data.hidden || []) { const m = groups.bldg.children.find((o) => o.name === n); if (m) { m.visible = false; hiddenNames.add(n); } }
