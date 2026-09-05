@@ -222,6 +222,7 @@ function addGltf(gltf, isFar) {
   gltf.scene.traverse((o) => { if (o.isMesh) list.push(o); });
   for (const m of list) {
     const kind = isFar ? 'far' : classify(m.name);
+    if (kind === 'brid' && !isFar && !gltf.__bridFile) continue; // 橋は shibuya_brid.glb（1本ずつ）から読む
     m.material = $('shade').checked ? shadeMats[kind] : flatMats[kind];
     m.matrixAutoUpdate = false; m.updateMatrix();
     const rec = { mesh: m, edges: null, kind };
@@ -234,8 +235,8 @@ function addGltf(gltf, isFar) {
 
 const loader = new GLTFLoader();
 const draco = new DRACOLoader(); draco.setDecoderPath('./lib/draco/'); loader.setDRACOLoader(draco);
-function loadGlb(url, isFar) {
-  return new Promise((res, rej) => loader.load(url, (g) => { addGltf(g, isFar); res(); },
+function loadGlb(url, isFar, isBrid) {
+  return new Promise((res, rej) => loader.load(url, (g) => { if (isBrid) g.__bridFile = true; addGltf(g, isFar); res(); },
     (ev) => { if (ev.total) status(`${url.split('/').pop()} 読み込み ${Math.round(ev.loaded / ev.total * 100)}%`); }, rej));
 }
 
@@ -364,7 +365,7 @@ canvas.addEventListener('pointerup', (e) => {
   ray.setFromCamera(nd, camera); ray.far = 3000;
   if (handlePickClick(e)) return;
   if (editMode === 'delete') {
-    const hits = ray.intersectObjects(groups.bldg.children, false);
+    const hits = ray.intersectObjects([...groups.bldg.children, ...groups.brid.children], false);
     if (hits.length) hideBuilding(hits[0].object);
     return;
   }
@@ -442,13 +443,15 @@ function setEditMode(m) {
   status(editMode === 'delete' ? '消すモード：建物をクリックすると非表示' : editMode === 'place' ? '地面をクリックすると箱の位置が入る' : '');
 }
 $('editDelete').onclick = () => setEditMode('delete');
+$('editDelete').textContent = '消すモード（建物・橋をクリック）';
 $('editPlace').onclick = () => setEditMode('place');
 function hideBuilding(m) { m.visible = false; hiddenNames.add(m.name); renderHidden(); saveEdits(); mmDirty = true; }
-function showBuilding(name) { const m = groups.bldg.children.find((o) => o.name === name); if (m) m.visible = true; hiddenNames.delete(name); renderHidden(); saveEdits(); mmDirty = true; }
+const findHideable = (name) => groups.bldg.children.find((o) => o.name === name) || groups.brid.children.find((o) => o.name === name);
+function showBuilding(name) { const m = findHideable(name); if (m) m.visible = true; hiddenNames.delete(name); renderHidden(); saveEdits(); mmDirty = true; }
 function renderHidden() {
   const box = $('hiddenList'); box.innerHTML = hiddenNames.size ? `消した建物 ${hiddenNames.size} 棟` : '';
   for (const n of hiddenNames) { const d = document.createElement('div'); const sp = document.createElement('span'); sp.textContent = n.replace('bldg_', '').slice(0, 8);
-    const m = groups.bldg.children.find((o) => o.name === n); if (m) { const bb = new THREE.Box3().setFromObject(m); sp.textContent += `  高さ${(bb.max.y - bb.min.y).toFixed(0)}m`; }
+    const m = findHideable(n); if (m) { const bb = new THREE.Box3().setFromObject(m); sp.textContent += (n.startsWith('brid') ? '（橋・デッキ）' : '') + `  高さ${(bb.max.y - bb.min.y).toFixed(0)}m`; }
     const go = document.createElement('button'); go.textContent = '見る'; go.onclick = () => { if (m) { const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()); const p = t2b(c); const cs = camState(); lookAtB(p.x, p.y, p.z); } };
     const b = document.createElement('button'); b.textContent = '戻す'; b.onclick = () => showBuilding(n); d.append(sp, go, b); box.appendChild(d); }
 }
@@ -507,8 +510,8 @@ const LS_EDITS = 'shibuya_2005_edits';
 function saveEdits() { try { localStorage.setItem(LS_EDITS, JSON.stringify(editsData())); } catch {} }
 function editsData() { return { hidden: [...hiddenNames], boxes: boxes.map(({ name, w, d, h, rot, x, y, type, n, hb, z, note }) => ({ name, w, d, h, rot, x, y, type, n, hb, z, note })) }; }
 function applyEdits(data, merge = false) {
-  if (!merge) { for (const n of hiddenNames) { const m = groups.bldg.children.find((o) => o.name === n); if (m) m.visible = true; } hiddenNames.clear(); for (const b of boxes) groups.boxes.remove(b.mesh); boxes.length = 0; }
-  for (const n of data.hidden || []) { const m = groups.bldg.children.find((o) => o.name === n); if (m) { m.visible = false; hiddenNames.add(n); } }
+  if (!merge) { for (const n of hiddenNames) { const m = findHideable(n); if (m) m.visible = true; } hiddenNames.clear(); for (const b of boxes) groups.boxes.remove(b.mesh); boxes.length = 0; }
+  for (const n of data.hidden || []) { const m = findHideable(n); if (m) { m.visible = false; hiddenNames.add(n); } }
   for (const b of data.boxes || []) { const nb = { ...b }; boxes.push(nb); rebuildBox(nb); }
   renderHidden(); renderBoxes(); saveEdits(); mmDirty = true;
 }
@@ -859,6 +862,7 @@ onResize(); applyFocal();
 (async () => {
   try {
     await loadGlb('./data/shibuya_near.glb', false);
+    try { await loadGlb('./data/shibuya_brid.glb', false, true); } catch (e) { console.warn('brid glb なし', e); }
     status(`読み込み完了：${meshes.length} オブジェクト`);
     mmDirty = true;
     loadEdits();
