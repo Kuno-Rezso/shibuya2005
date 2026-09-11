@@ -3,7 +3,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>渋谷ビューア（漫画背景カメラ）</title>
 <style>
   :root { --panel: #1b1d22; --fg: #e8e8e8; --muted: #9aa0a6; --acc: #6cb6ff; }
@@ -26,7 +26,10 @@
   button.primary { background: #2a5d8f; border-color: #3b7bbf; }
   .seg button.on { background: #3b7bbf; }
   #status { color: var(--muted); font-size: 12px; min-height: 18px; }
-  #presets div { display: flex; gap: 4px; align-items: center; margin: 2px 0; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  #presets .th { display: flex; flex-direction: column; width: 120px; gap: 2px; font-size: 11px; }
+  #presets .th img { width: 120px; height: 80px; object-fit: cover; border: 1px solid #666; border-radius: 3px; cursor: pointer; background: #fff; }
+  #presets .th .nm { display: flex; gap: 4px; align-items: center; }
   #presets span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #minimap { position: fixed; right: 10px; bottom: 10px; width: 260px; height: 260px; border: 1px solid #888; background: #fff; cursor: crosshair; }
   #help { position: fixed; right: 10px; top: 10px; background: rgba(27,29,34,.9); color: var(--fg); padding: 8px 10px; border-radius: 4px; font-size: 12px; max-width: 320px; }
@@ -41,28 +44,83 @@
   #hiddenList span, #boxList span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #view { touch-action: none; }
   body.editing #view { cursor: crosshair; }
+  /* ---- タブ・折り畳み・タッチ（2026-09-11 v5） ---- */
+  html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  #tabs { display: flex; gap: 2px; position: sticky; top: 0; background: var(--panel); padding: 4px 0 6px; z-index: 2; }
+  #tabs button { flex: 1; padding: 6px 2px; font-size: 12px; min-width: 0; }
+  #tabs button.on { background: #3b7bbf; border-color: #3b7bbf; }
+  #panel section { display: none; }
+  #panel section.on { display: block; }
+  #helpBtn { position: fixed; right: 10px; top: 10px; z-index: 6; width: 34px; height: 34px; border-radius: 17px; font-size: 16px; padding: 0; }
+  #help { display: none; top: 50px; z-index: 6; }
+  #help.on { display: block; }
+  #mmToggle { position: fixed; right: 10px; bottom: 276px; z-index: 5; font-size: 12px; padding: 4px 8px; }
+  body.mmHidden #minimap { display: none; }
+  body.mmHidden #mmToggle { bottom: 10px; }
+  #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(27,29,34,.92); color: var(--fg); padding: 8px 14px; border-radius: 6px; font-size: 14px; z-index: 7; display: none; max-width: 70vw; pointer-events: none; }
+  #toast.on { display: block; }
+  .step { display: none; }
+  #shotView { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; box-sizing: border-box; }
+  #shotView.on { display: flex; }
+  #shotView img { max-width: 100%; max-height: 78vh; background: #fff; box-shadow: 0 0 12px rgba(0,0,0,.5); }
+  #shotView .small { color: #ddd; font-size: 13px; }
+  #shotView .btn { background: #2a5d8f; color: var(--fg); border: 1px solid #3b7bbf; border-radius: 4px; padding: 8px 14px; text-decoration: none; min-height: 28px; display: inline-flex; align-items: center; }
+  @media (pointer: coarse), (max-width: 900px) {
+    #panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 46vh; padding: 6px 12px calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -2px 8px rgba(0,0,0,.3); border-radius: 12px 12px 0 0; }
+    #panel.hidden { transform: translateY(100%); }
+    #toggle { top: auto; left: 50%; bottom: calc(46vh + 8px); transform: translateX(-50%); padding: 8px 18px; font-size: 16px; transition: bottom .2s; box-shadow: 0 1px 6px rgba(0,0,0,.4); }
+    #panel.hidden + #toggle { left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 13px; margin: 2px 0 4px; }
+    #tabs button { padding: 10px 2px; font-size: 14px; min-height: 40px; }
+    button { min-height: 44px; padding: 8px 12px; font-size: 15px; }
+    input[type=number], input[type=text], select { height: 40px; font-size: 16px; width: 84px; box-sizing: border-box; }
+    input[type=text] { width: 180px; }
+    input[type=checkbox] { width: 22px; height: 22px; }
+    input[type=range] { min-width: 120px; height: 32px; }
+    .row { gap: 8px; margin: 6px 0; }
+    .row label { min-width: 56px; font-size: 14px; }
+    .step { display: inline-block; min-width: 40px; min-height: 40px; padding: 0; font-size: 20px; line-height: 1; }
+    #pad { bottom: auto; top: 50%; left: auto; right: 10px; transform: translateY(-50%); padding: 6px; transition: top .2s; }
+    body.panelOpen #pad { top: 27vh; }
+    #pad button { min-width: 64px; min-height: 48px; font-size: 14px; padding: 6px; }
+    #pad .hint { display: none; }
+    #minimap { width: 160px; height: 160px; bottom: auto; top: 10px; right: auto; left: 10px; }
+    #mmToggle { bottom: auto; top: 10px; left: 178px; right: auto; min-height: 34px; }
+    body.mmHidden #mmToggle { top: 10px; left: 10px; }
+    #help { max-width: 70vw; font-size: 13px; }
+    #shotView img { max-height: 70vh; }
+  }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
 <canvas id="overlay"></canvas>
 <canvas id="minimap" width="520" height="520"></canvas>
+<button id="mmToggle" title="ミニマップの表示切替">地図</button>
+<div id="toast"></div>
 <div id="pad">
   <div class="padrow"><button data-k="KeyE">上</button><button data-k="KeyW">▲ 進む</button><button data-k="KeyQ">下</button></div>
   <div class="padrow"><button data-k="KeyA">◀ 左</button><button data-k="KeyS">▼ 戻る</button><button data-k="KeyD">右 ▶</button></div>
   <div class="padrow"><button data-k="TurnL">↶ 左を向く</button><button data-k="TurnR">右を向く ↷</button></div>
   <div class="hint">地面をクリック＝そこへ移動／ドラッグ＝見回す／キーボード W A S D も可</div>
 </div>
+<button id="helpBtn" title="操作説明">?</button>
 <div id="help">
   <b>操作</b><br>
-  歩き：<b>地面をクリック＝そこへ移動</b>／左ドラッグで見回す／下のボタンか <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> で歩く／<kbd>Q</kbd><kbd>E</kbd>上下／<kbd>Shift</kbd>速く／ホイール＝焦点距離<br>
+  歩き：<b>地面をクリック＝そこへ移動</b>／左ドラッグで見回す／横のボタンか <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> で歩く／<kbd>Q</kbd><kbd>E</kbd>上下／<kbd>Shift</kbd>速く／ホイール＝焦点距離<br>
   軌道：左ドラッグ回転／右ドラッグ平行移動／ホイール寄る／移動ボタン・WASDも効く<br>
-  ミニマップをクリック＝そこへ移動
+  <b>iPad</b>：指でドラッグ＝見回す／タップ＝そこへ移動／<b>ピンチ＝焦点距離</b>／<b>二本指で上下ドラッグ＝目線の高さ</b><br>
+  ミニマップをクリック＝そこへ移動。画面下の「☰」で操作パネルを出し入れ。
 </div>
+<div id="shotView"><img id="shotImg" alt="書き出した画像"><div class="row" id="shotLayers" hidden></div><div class="small" id="shotHint">iPad＝「写真に保存」→共有シートで「画像を保存」（または画像を長押し→「写真に追加」）／PC＝「ファイルに保存」</div><div class="row"><button id="shotPhotos" class="primary" hidden>写真に保存</button><a id="shotSave" class="btn" download>ファイルに保存</a><button id="shotClose">閉じる</button></div></div>
 <div id="panel">
-  <h1>渋谷ビューア（現況PLATEAU）</h1>
+  <h1>渋谷ビューア（2005年・PLATEAU）</h1>
   <div id="status">読み込み中…</div>
+  <nav id="tabs">
+    <button data-tab="move">移動</button><button data-tab="cam">カメラ</button><button data-tab="view">表示</button><button data-tab="edit">2005年</button><button data-tab="shot">書き出し</button>
+  </nav>
 
+  <section data-tab="move">
   <h2>モード</h2>
   <div class="row seg">
     <button id="modeWalk" class="on">歩き（目線）</button>
@@ -71,7 +129,11 @@
   <div class="row"><label>目線高</label><input id="eyeH" type="number" step="0.1" value="1.6"> m
     <label style="min-width:auto"><input id="followGround" type="checkbox" checked> 地面追従</label></div>
   <div class="row"><label>移動速度</label><input id="speed" type="range" min="1" max="60" value="12"><span id="speedV">12</span> m/s</div>
+  <h2>地点へ移動</h2>
+  <div class="row" id="landmarks"></div>
+  </section>
 
+  <section data-tab="cam">
   <h2>カメラ（数値で直接指定できる）</h2>
   <div class="row"><label>X 東</label><input id="cx" type="number" step="1"> <label>Y 北</label><input id="cy" type="number" step="1"></div>
   <div class="row"><label>Z 標高</label><input id="cz" type="number" step="0.1"> <span class="small">地面 <span id="gz">-</span> m</span></div>
@@ -79,10 +141,14 @@
   <div class="row"><label>仰角</label><input id="pitch" type="number" step="1"> ° <label>ロール</label><input id="roll" type="number" step="1" value="0"> °</div>
   <div class="row"><label>焦点距離</label><input id="focal" type="number" step="1" value="28"> mm <span class="small">(35mm換算) 画角 <span id="fovV">-</span></span></div>
   <div class="row"><button id="applyCam" class="primary">適用</button><button id="lookCenter">交差点を向く</button></div>
+  <h2>視点の保存</h2>
+  <div class="row"><input id="presetName" type="text" placeholder="名前（例: ハチ公前→109）"><button id="savePreset">保存</button><button id="thumbAll" title="サムネの無い視点や古いサムネを描き直す">サムネ更新</button></div>
+  <div class="small">保存すると今の見え方の小さな絵（サムネ）が付く。絵をタップでその視点へ。</div>
+  <div id="presets"></div>
+  <div class="row"><button id="exportPresets">JSON書き出し</button><button id="importPresets">JSON読み込み</button><input id="importFile" type="file" accept="application/json" hidden><button id="copyUrl">URLをコピー</button></div>
+  </section>
 
-  <h2>地点へ移動</h2>
-  <div class="row" id="landmarks"></div>
-
+  <section data-tab="view">
   <h2>表示</h2>
   <div class="row"><label style="min-width:auto"><input id="showEdges" type="checkbox" checked> 輪郭線</label>
     <label style="min-width:auto"><input id="showFill" type="checkbox" checked> 面（白）</label>
@@ -94,10 +160,24 @@
     <label style="min-width:auto"><input id="showDem" type="checkbox" checked> 地形</label></div>
   <div class="row"><label style="min-width:auto"><input id="showFar" type="checkbox"> 遠景の建物（700m外）</label></div>
   <div class="row"><label style="min-width:auto"><input id="showTex" type="checkbox"> <b>テクスチャ（写真）</b></label> <span class="small">初回は28MB読み込み</span></div>
+  <h2>作画補助</h2>
   <div class="row"><label style="min-width:auto"><input id="showHorizon" type="checkbox" checked> アイレベル線</label>
     <label style="min-width:auto"><input id="showThirds" type="checkbox"> 三分割</label>
     <label style="min-width:auto"><input id="showFrame" type="checkbox"> 書き出し枠</label></div>
+  <div class="row"><label style="min-width:auto"><input id="showVP" type="checkbox" checked> 消失点</label>
+    <label style="min-width:auto"><input id="showRays" type="checkbox"> パース定規線</label>
+    <label>建物の向き</label><input id="gridYaw" type="number" step="1" value="0"> °</div>
+  <div class="small">消失点＝建物の向き（0=東西・南北の格子）に沿った2点＋鉛直。画面外のときは枠の端に方向と距離（枠幅の何倍か）を出す。渋谷は通りごとに向きが違うので、描く通りに合わせて角度を変える。</div>
+  <div class="row"><label style="min-width:auto"><input id="showGrid" type="checkbox"> 地面グリッド（5m・25m）</label></div>
+  <div class="row"><b class="small">人物・車の当たり</b></div>
+  <div class="row"><label>種類</label><select id="figKind"><option value="person">大人</option><option value="child">子供</option><option value="bike">自転車＋人</option><option value="sedan">セダン</option><option value="bus">バス</option></select>
+    <label>身長</label><input id="figH" type="number" step="0.05" value="1.7"> m <label>向き</label><input id="figYaw" type="number" step="5" placeholder="カメラと同じ"> °</div>
+  <div class="row"><button id="editFigure">置くモード（地面をクリック）</button><button id="clearFigures">全部消す</button></div>
+  <div class="small">寸法の目安：子供1.2m／自転車 全長1.8m・乗った人の頭まで約1.95m／セダン 4.6×1.75m・高さ1.45m／バス 10.5×2.5m・高さ3.3m。向き＝方位（0北・90東）。空欄ならカメラの向きで、奥へ進む形に置く。</div>
+  <div id="figList" class="small"></div>
+  </section>
 
+  <section data-tab="edit">
   <h2>2005年化の編集</h2>
   <div class="row seg"><button id="apply2005" class="primary">2005年版を適用</button><button id="clearEdits">現況に戻す</button></div>
   <div class="small">2005年版＝ヒカリエ・スクランブルスクエア・ストリーム・フクラス・銀座線新駅などを消し、東横店・東横線ホーム・旧東急プラザなどを箱で置く。箱は「編集」で直せる。</div>
@@ -131,19 +211,22 @@
   <div class="row"><label style="min-width:auto"><input id="lockFocal" type="checkbox"> 焦点距離を固定（EXIFで分かるとき）</label></div>
   <div id="pairList" class="small"></div>
   <div class="row"><button id="exportEdits">編集をJSON書き出し</button><button id="importEdits">JSON読み込み</button><input id="importEditsFile" type="file" accept="application/json" hidden></div>
+  </section>
 
-  <h2>視点の保存</h2>
-  <div class="row"><input id="presetName" type="text" placeholder="名前（例: ハチ公前→109）"><button id="savePreset">保存</button></div>
-  <div id="presets"></div>
-  <div class="row"><button id="exportPresets">JSON書き出し</button><button id="importPresets">JSON読み込み</button><input id="importFile" type="file" accept="application/json" hidden><button id="copyUrl">URLをコピー</button></div>
-
+  <section data-tab="shot">
   <h2>画像書き出し</h2>
   <div class="row"><label>幅×高</label><input id="shotW" type="number" value="3000"> × <input id="shotH" type="number" value="2000"></div>
   <div class="row"><label style="min-width:auto"><input id="shotTransparent" type="checkbox"> 線のみ（透過PNG）</label></div>
+  <div class="row"><label style="min-width:auto"><input id="shotInfo" type="checkbox" checked> 撮影情報を焼き込む</label>
+    <label style="min-width:auto"><input id="shotGuides" type="checkbox"> 補助線も焼き込む</label></div>
+  <div class="small">撮影情報＝地点・座標・方位・仰角・焦点距離・アイレベル高・日時を画像の下端に小さく入れる。同じ視点を後で再現できる。補助線＝アイレベル・消失点・定規線・三分割（表示中のものだけ）。</div>
   <div class="row"><button id="shoot" class="primary">PNGを書き出す</button></div>
+  <div class="row"><button id="shootLayers">レイヤー分けで書き出す（4枚）</button></div>
+  <div class="small">レイヤー分け＝透過PNG4枚：①輪郭線（形の外周と手前後ろの境目、太め）②稜線（面と面の折れ目・窓割り、細め。輪郭と重なる分は抜いてある）③地面グリッド＋補助線（表示中のものだけ）④撮影情報の文字。ペイントソフトで重ねて下絵にする。遠くの霞みは入れない。</div>
   <p class="small">座標＝原点はスクランブル交差点、X東・Y北・Z標高m。</p>
   <p class="small">出典：3D都市モデル（Project PLATEAU）渋谷区（2025年度）／国土交通省。建物の形・写真はPLATEAUのデータをそのまま表示している（現況。2005年の姿ではない）。</p>
   <p class="small">空中写真：地理院タイル（国土地理院）。建物：3D都市モデル Project PLATEAU 渋谷区 2025年度（国土交通省）。</p>
+  </section>
 </div>
 <button id="toggle">☰</button>
 
@@ -168,7 +251,7 @@ const LANDMARKS = [
 ];
 
 const $ = (id) => document.getElementById(id);
-const status = (t) => { $('status').textContent = t; };
+const status = (t) => { $('status').textContent = t; if (t && $('panel').classList.contains('hidden')) toast(t); };
 
 // ---------- renderer / scene
 const canvas = $('view');
@@ -356,10 +439,12 @@ for (const b of document.querySelectorAll('#pad button')) {
 const releasePad = () => { for (const b of document.querySelectorAll('#pad button')) { keys.delete(b.dataset.k); b.classList.remove('on'); } };
 window.addEventListener('pointerup', releasePad); window.addEventListener('blur', releasePad); document.addEventListener('visibilitychange', releasePad);
 window.addEventListener('keyup', (e) => keys.delete(e.code));
+let gesture = null, gestureEnd = 0; const touches = new Map();
 let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, moved = 0;
 canvas.addEventListener('pointerdown', (e) => { canvas.focus(); downX = e.clientX; downY = e.clientY; moved = 0; if (mode !== 'walk' || e.button !== 0) return; dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointerup', (e) => {
   dragging = false;
+  if (gesture || performance.now() - gestureEnd < 400) return;
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
   const nd = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   ray.setFromCamera(nd, camera); ray.far = 3000;
@@ -374,6 +459,11 @@ canvas.addEventListener('pointerup', (e) => {
     if (hits.length) { const p = t2b(hits[0].point); $('bxX').value = p.x.toFixed(0); $('bxY').value = p.y.toFixed(0); status(`箱の位置 X=${p.x.toFixed(0)} Y=${p.y.toFixed(0)}`); if (selectedBox) { selectedBox.x = +$('bxX').value; selectedBox.y = +$('bxY').value; rebuildBox(selectedBox); saveEdits(); } }
     return;
   }
+  if (editMode === 'figure') {
+    const hits = ray.intersectObjects([...groups.tran.children, ...groups.dem.children, ...groups.brid.children], false);
+    if (hits.length) { const p = t2b(hits[0].point); const kind = $('figKind').value; const yaw = $('figYaw').value === '' ? camState().yaw : +$('figYaw').value; addFigure(p.x, p.y, p.z, kind === 'child' ? Math.min(+$('figH').value || 1.2, 1.5) : (+$('figH').value || 1.7), kind, yaw); status(`${FIG_NAMES[kind]}を置いた X=${p.x.toFixed(0)} Y=${p.y.toFixed(0)}`); }
+    return;
+  }
   if (mode !== 'walk') return;
   // クリック（ドラッグなし）＝地面のその場所へ移動
   const hits = ray.intersectObjects([...groups.tran.children, ...groups.dem.children, ...groups.brid.children], false);
@@ -383,7 +473,7 @@ canvas.addEventListener('pointerup', (e) => {
   }
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (!dragging || mode !== 'walk') return;
+  if (!dragging || mode !== 'walk' || gesture) return;
   const dx = e.clientX - lastX, dy = e.clientY - lastY; lastX = e.clientX; lastY = e.clientY; moved += Math.abs(dx) + Math.abs(dy);
   const k = 0.0025 * (28 / Math.max(8, +$('focal').value));
   camera.rotation.y -= dx * k;
@@ -438,9 +528,9 @@ const hiddenNames = new Set();
 const boxes = [];
 function setEditMode(m) {
   editMode = editMode === m ? null : m;
-  $('editDelete').classList.toggle('on', editMode === 'delete'); $('editPlace').classList.toggle('on', editMode === 'place');
+  $('editDelete').classList.toggle('on', editMode === 'delete'); $('editPlace').classList.toggle('on', editMode === 'place'); $('editFigure').classList.toggle('on', editMode === 'figure');
   document.body.classList.toggle('editing', !!editMode);
-  status(editMode === 'delete' ? '消すモード：建物をクリックすると非表示' : editMode === 'place' ? '地面をクリックすると箱の位置が入る' : '');
+  status(editMode === 'delete' ? '消すモード：建物をクリックすると非表示' : editMode === 'place' ? '地面をクリックすると箱の位置が入る' : editMode === 'figure' ? '地面をクリックすると当たり（人・車）が置かれる' : '');
 }
 $('editDelete').onclick = () => setEditMode('delete');
 $('editDelete').textContent = '消すモード（建物・橋をクリック）';
@@ -517,7 +607,7 @@ function applyEdits(data, merge = false) {
 }
 function loadEdits() { let d = null; try { d = JSON.parse(localStorage.getItem(LS_EDITS) || 'null'); } catch {} if (d) applyEdits(d); else apply2005(); }
 async function apply2005() {
-  try { const d = await (await fetch('./data/edits_2005.json')).json(); applyEdits(d); status('2005年版を適用した（消した建物 ' + (d.hidden || []).length + '、箱 ' + (d.boxes || []).length + '）'); }
+  try { const d = await (await fetch('./data/edits_2005.json?v=' + Date.now(), { cache: 'no-store' })).json(); applyEdits(d); status('2005年版を適用した（消した建物 ' + (d.hidden || []).length + '、箱 ' + (d.boxes || []).length + '）'); }
   catch (e) { status('2005年版の読み込みに失敗: ' + e.message); }
 }
 $('apply2005').onclick = apply2005;
@@ -731,35 +821,12 @@ function drawOverlay() {
     });
     if (pendingPhoto) { const a = toS(pendingPhoto); octx.strokeStyle = '#e00'; octx.lineWidth = 2; octx.beginPath(); octx.arc(a[0], a[1], 7, 0, Math.PI * 2); octx.stroke(); }
   }
+  const rect = $('showFrame').checked ? frameRect() : { x: 0, y: 0, w, h };
   if ($('showFrame').checked) {
-    const ar = (+$('shotW').value) / (+$('shotH').value);
-    let fw = w, fh = w / ar; if (fh > h) { fh = h; fw = h * ar; }
-    const fx = (w - fw) / 2, fy = (h - fh) / 2;
+    const { x: fx, y: fy, w: fw, h: fh } = rect;
     octx.fillStyle = 'rgba(0,0,0,.35)'; octx.fillRect(0, 0, w, fy); octx.fillRect(0, fy + fh, w, h - fy - fh); octx.fillRect(0, fy, fx, fh); octx.fillRect(fx + fw, fy, w - fx - fw, fh);
-    if ($('showThirds').checked) {
-      octx.strokeStyle = 'rgba(0,120,255,.5)'; octx.lineWidth = 1; octx.beginPath();
-      for (let i = 1; i < 3; i++) { octx.moveTo(fx + fw * i / 3, fy); octx.lineTo(fx + fw * i / 3, fy + fh); octx.moveTo(fx, fy + fh * i / 3); octx.lineTo(fx + fw, fy + fh * i / 3); }
-      octx.stroke();
-    }
-  } else if ($('showThirds').checked) {
-    octx.strokeStyle = 'rgba(0,120,255,.5)'; octx.lineWidth = 1; octx.beginPath();
-    for (let i = 1; i < 3; i++) { octx.moveTo(w * i / 3, 0); octx.lineTo(w * i / 3, h); octx.moveTo(0, h * i / 3); octx.lineTo(w, h * i / 3); }
-    octx.stroke();
   }
-  if ($('showHorizon').checked) {
-    // カメラと同じ高さの無限遠点 → 画面上のアイレベル
-    const fwd = camera.getWorldDirection(new THREE.Vector3()); fwd.y = 0;
-    if (fwd.lengthSq() > 1e-6) {
-      fwd.normalize();
-      const p1 = camera.position.clone().addScaledVector(fwd, 5000);
-      const left = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd).normalize();
-      const p0 = p1.clone().addScaledVector(left, 4000), p2 = p1.clone().addScaledVector(left, -4000);
-      const toS = (p) => { const v = p.project(camera); return v.z < 1 ? [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h] : null; };
-      const a = toS(p0), b = toS(p2);
-      if (a && b) { octx.strokeStyle = 'rgba(220,0,0,.8)'; octx.lineWidth = 1; octx.setLineDash([8, 6]); octx.beginPath(); octx.moveTo(a[0], a[1]); octx.lineTo(b[0], b[1]); octx.stroke(); octx.setLineDash([]);
-        octx.fillStyle = 'rgba(220,0,0,.9)'; octx.font = '12px sans-serif'; octx.fillText('アイレベル', Math.min(a[0], b[0]) + 320, (a[1] + b[1]) / 2 - 4); }
-    }
-  }
+  drawGuides(octx, w, h, rect, false);
 }
 
 // ---------- ミニマップ（真上オルソ）
@@ -769,13 +836,11 @@ const mmRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuf
 let mmDirty = true;
 function renderMinimap() {
   if (mmDirty) {
-    const vis = [groups.frn.visible, groups.dem.visible, groups.far.visible]; groups.frn.visible = false; groups.dem.visible = false; groups.far.visible = false; groups.tex.visible = false;
-// テクスチャ付き建物（nusamai glTF, EPSG:6677 原点そのまま）→ 交差点原点へ平行移動
-groups.tex.position.set(12026.8, 0, -37767.5);
+    const vis = [groups.frn.visible, groups.dem.visible, groups.far.visible]; groups.frn.visible = false; groups.dem.visible = false; groups.far.visible = false; groups.tex.visible = false; const gv = gridGroup.visible; gridGroup.visible = false; figGroup.visible = false;
     const ev = $('showEdges').checked; for (const r of meshes) if (r.edges) r.edges.visible = true;
     mmRenderer.render(scene, mmCam);
     for (const r of meshes) if (r.edges) r.edges.visible = ev;
-    [groups.frn.visible, groups.dem.visible, groups.far.visible] = vis;
+    [groups.frn.visible, groups.dem.visible, groups.far.visible] = vis; gridGroup.visible = gv; figGroup.visible = true;
     mmDirty = false;
   }
   mctx.clearRect(0, 0, 520, 520); mctx.drawImage(mmRenderer.domElement, 0, 0);
@@ -799,17 +864,30 @@ mm.addEventListener('click', (e) => {
 const LS = 'shibuya_viewer_presets';
 function loadPresets() { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } }
 function savePresets(list) { try { localStorage.setItem(LS, JSON.stringify(list)); } catch {} renderPresets(); }
+// 視点サムネ（作画D、2026-09-11）：240×160 のJPEGを視点と一緒に localStorage に持つ
+function thumbFor(cam) {
+  const W = 240, H = 160; const oldSize = new THREE.Vector2(); renderer.getSize(oldSize); const oldPR = renderer.getPixelRatio();
+  const cur = camState();
+  try {
+    renderer.setPixelRatio(1); renderer.setSize(W, H, false); camera.aspect = W / H;
+    if (cam) setCam(cam); applyFocal(); renderer.render(scene, camera);
+    const c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').drawImage(renderer.domElement, 0, 0, W, H);
+    return c.toDataURL('image/jpeg', 0.7);
+  } finally { if (cam) setCam(cur); renderer.setPixelRatio(oldPR); renderer.setSize(oldSize.x, oldSize.y, false); onResize(); }
+}
 function renderPresets() {
   const box = $('presets'); box.innerHTML = '';
   for (const [i, p] of loadPresets().entries()) {
-    const d = document.createElement('div');
+    const d = document.createElement('div'); d.className = 'th';
+    const img = document.createElement('img'); img.alt = p.name; img.title = '視点へ移動'; if (p.thumb) img.src = p.thumb; img.onclick = () => setCam(p.cam);
+    const nm = document.createElement('div'); nm.className = 'nm';
     const sp = document.createElement('span'); sp.textContent = p.name; sp.title = JSON.stringify(p.cam);
-    const go = document.createElement('button'); go.textContent = '移動'; go.onclick = () => setCam(p.cam);
     const del = document.createElement('button'); del.textContent = '×'; del.onclick = () => { const l = loadPresets(); l.splice(i, 1); savePresets(l); };
-    d.append(sp, go, del); box.appendChild(d);
+    nm.append(sp, del); d.append(img, nm); box.appendChild(d);
   }
 }
-$('savePreset').onclick = () => { const name = $('presetName').value.trim() || `視点${loadPresets().length + 1}`; const l = loadPresets(); l.push({ name, cam: camState() }); savePresets(l); $('presetName').value = ''; };
+$('savePreset').onclick = () => { const name = $('presetName').value.trim() || `視点${loadPresets().length + 1}`; const l = loadPresets(); l.push({ name, cam: camState(), thumb: thumbFor(null) }); savePresets(l); $('presetName').value = ''; };
+$('thumbAll').onclick = () => { const l = loadPresets(); for (const p of l) p.thumb = thumbFor(p.cam); savePresets(l); status(`サムネを${l.length}枚描き直した`); };
 $('exportPresets').onclick = () => { const blob = new Blob([JSON.stringify(loadPresets(), null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shibuya_viewpoints.json'; a.click(); };
 $('importPresets').onclick = () => $('importFile').click();
 $('importFile').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const l = JSON.parse(await f.text()); savePresets(loadPresets().concat(l)); };
@@ -821,23 +899,6 @@ function readHash() {
   return false;
 }
 
-// ---------- 書き出し
-$('shoot').onclick = () => {
-  const W = +$('shotW').value || 3000, H = +$('shotH').value || 2000;
-  const transparent = $('shotTransparent').checked;
-  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize); const oldPR = renderer.getPixelRatio();
-  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
-  camera.aspect = W / H; applyFocal();
-  if (transparent) { renderer.setClearColor(0xffffff, 0); for (const m of allMats) m.colorWrite = false; }
-  renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL('image/png');
-  if (transparent) { renderer.setClearColor(0xffffff, 1); for (const m of allMats) m.colorWrite = true; }
-  renderer.setPixelRatio(oldPR); renderer.setSize(oldSize.x, oldSize.y, false); onResize();
-  const s = camState(); const a = document.createElement('a'); a.href = url;
-  a.download = `shibuya_x${s.x.toFixed(0)}_y${s.y.toFixed(0)}_yaw${Math.round(s.yaw)}_f${s.focal}.png`; a.click();
-  status(`書き出した ${W}×${H}`);
-};
-
 // ---------- ループ
 function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -846,7 +907,7 @@ function onResize() {
 window.addEventListener('resize', onResize);
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  walkUpdate(dt);
+  walkUpdate(dt); updateGrid();
   if (mode === 'orbit') { orbit.update(); syncPanelThrottled(); }
   renderer.render(scene, camera);
   drawOverlay();
@@ -855,6 +916,342 @@ function loop() {
 }
 let lastSync = 0; function syncPanelThrottled() { const t = performance.now(); if (t - lastSync > 200) { lastSync = t; syncPanel(); } }
 for (const id of ['showTran', 'showBrid', 'showEdges']) $(id).addEventListener('change', () => mmDirty = true);
+
+// ---------- v5（2026-09-11）：タブ・タッチ・作画補助・人物・書き出し ----------
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches;
+document.body.classList.toggle('touch', IS_TOUCH);
+
+// タブ
+function showTab(k) {
+  for (const s of document.querySelectorAll('#panel section')) s.classList.toggle('on', s.dataset.tab === k);
+  for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === k);
+  try { localStorage.setItem('shibuya_tab', k); } catch {}
+}
+for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
+let tab0 = 'move'; try { tab0 = localStorage.getItem('shibuya_tab') || 'move'; } catch {}
+showTab(tab0);
+const syncPanelOpen = () => document.body.classList.toggle('panelOpen', !$('panel').classList.contains('hidden'));
+$('toggle').addEventListener('click', syncPanelOpen);
+if (IS_TOUCH) $('panel').classList.add('hidden');
+syncPanelOpen();
+
+// 数値入力：−／＋ボタン（タッチのときだけ表示）と小数キーボード
+for (const inp of document.querySelectorAll('#panel input[type=number]')) {
+  inp.setAttribute('inputmode', 'decimal');
+  const mk = (sign) => { const b = document.createElement('button'); b.className = 'step'; b.textContent = sign > 0 ? '＋' : '−'; b.tabIndex = -1;
+    b.onclick = () => { const st = +inp.step || 1; const v = (+inp.value || 0) + sign * st; const dec = (String(st).split('.')[1] || '').length; inp.value = v.toFixed(dec);
+      inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); }; return b; };
+  inp.after(mk(1)); inp.after(mk(-1));
+}
+// カメラ数値は「適用」を押さなくても change で効く
+for (const id of ['cx', 'cy', 'cz', 'yaw', 'pitch', 'roll']) $(id).addEventListener('change', () => { if (!syncing) $('applyCam').onclick(); });
+
+// ミニマップ折り畳み・ヘルプ・トースト
+$('mmToggle').onclick = () => { document.body.classList.toggle('mmHidden'); try { localStorage.setItem('shibuya_mm', document.body.classList.contains('mmHidden') ? '0' : '1'); } catch {} };
+try { if (localStorage.getItem('shibuya_mm') === '0' || (IS_TOUCH && localStorage.getItem('shibuya_mm') === null)) document.body.classList.add('mmHidden'); } catch {}
+$('helpBtn').onclick = () => $('help').classList.toggle('on');
+try { if (!localStorage.getItem('shibuya_help_seen')) { $('help').classList.add('on'); localStorage.setItem('shibuya_help_seen', '1'); setTimeout(() => $('help').classList.remove('on'), 12000); } } catch {}
+let toastT = 0;
+function toast(t) { const el = $('toast'); if (!t) { el.classList.remove('on'); return; } el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 3500); }
+
+// 地面グリッド（5m／25m）：カメラの足元の地面高に置き、25m単位に吸着
+const gridGroup = new THREE.Group(); scene.add(gridGroup); gridGroup.visible = false;
+const grid5 = new THREE.GridHelper(300, 60, 0xbdbdbd, 0xd6d6d6); const grid25 = new THREE.GridHelper(300, 12, 0x8a8a8a, 0x8a8a8a);
+grid25.position.y = 0.02; gridGroup.add(grid5, grid25);
+let gridKey = '';
+function updateGrid() {
+  if (!gridGroup.visible) return;
+  const p = t2b(camera.position); const gx = Math.round(p.x / 25) * 25, gy = Math.round(p.y / 25) * 25; const key = gx + ',' + gy;
+  if (key === gridKey) return; gridKey = key;
+  gridGroup.position.copy(b2t(gx, gy, groundAt(gx, gy) + 0.05));
+}
+$('showGrid').onchange = () => { gridGroup.visible = $('showGrid').checked; gridKey = ''; updateGrid(); };
+
+// 人物（身長の当たり）
+const figGroup = new THREE.Group(); scene.add(figGroup);
+const figMat = new THREE.MeshLambertMaterial({ color: 0x8a8a8a, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+allMats.push(figMat, boxMat); // 線のみ書き出しで面を消す対象に含める
+const figures = []; const LS_FIG = 'shibuya_figures';
+function figGeometry(h) {
+  const r = h * 0.11, headR = h * 0.07, bodyH = h - headR * 2;
+  const body = new THREE.CylinderGeometry(r * 0.8, r, bodyH, 12); body.translate(0, bodyH / 2, 0);
+  const head = new THREE.SphereGeometry(headR, 12, 8); head.translate(0, bodyH + headR, 0);
+  return mergeGeoms([body, head]);
+}
+// 車・自転車：長さ方向＝北（three の -Z）に作り、rotation.y で方位へ回す
+const FIG_NAMES = { person: '大人', child: '子供', bike: '自転車', sedan: 'セダン', bus: 'バス' };
+function boxG(L, Wd, Hh, z0) { const g = new THREE.BoxGeometry(Wd, Hh, L); g.translate(0, z0 + Hh / 2, 0); return g; }
+function wheelG(r, w, zPos, xPos) { const g = new THREE.CylinderGeometry(r, r, w, 16); g.rotateZ(Math.PI / 2); g.translate(xPos, r, -zPos); return g; }
+function vehicleGeometry(kind) {
+  if (kind === 'sedan') return mergeGeoms([boxG(4.6, 1.75, 0.65, 0.35), boxG(2.4, 1.6, 0.45, 1.0), wheelG(0.32, 0.2, 1.4, 0.8), wheelG(0.32, 0.2, 1.4, -0.8), wheelG(0.32, 0.2, -1.4, 0.8), wheelG(0.32, 0.2, -1.4, -0.8)]);
+  if (kind === 'bus') return mergeGeoms([boxG(10.5, 2.5, 2.95, 0.35), wheelG(0.5, 0.3, 3.2, 1.1), wheelG(0.5, 0.3, 3.2, -1.1), wheelG(0.5, 0.3, -3.5, 1.1), wheelG(0.5, 0.3, -3.5, -1.1)]);
+  if (kind === 'bike') { const rider = figGeometry(1.5); rider.translate(0, 0.45, 0.1); return mergeGeoms([wheelG(0.34, 0.05, 0.55, 0), wheelG(0.34, 0.05, -0.55, 0), boxG(1.0, 0.1, 0.4, 0.5), rider]); }
+  return null;
+}
+function rebuildFigure(f) {
+  if (f.mesh) { figGroup.remove(f.mesh); }
+  const kind = f.kind || 'person';
+  const m = new THREE.Mesh(vehicleGeometry(kind) || figGeometry(f.h), figMat);
+  const eg = new THREE.EdgesGeometry(m.geometry, THREE.MathUtils.degToRad(30)); const ed = new THREE.LineSegments(eg, edgeMat); m.add(ed);
+  m.position.copy(b2t(f.x, f.y, f.z)); m.rotation.y = -THREE.MathUtils.degToRad(f.yaw || 0); m.name = 'fig'; f.mesh = m; figGroup.add(m);
+}
+function saveFigures() { try { localStorage.setItem(LS_FIG, JSON.stringify(figures.map(({ x, y, z, h, kind, yaw }) => ({ x, y, z, h, kind, yaw })))); } catch {} }
+function renderFigures() {
+  const box = $('figList'); box.innerHTML = figures.length ? `当たり ${figures.length} 個` : '';
+  figures.forEach((f, i) => { const d = document.createElement('div'); const sp = document.createElement('span'); const k = f.kind || 'person'; sp.textContent = `${i + 1}: ${FIG_NAMES[k]}${k === 'person' || k === 'child' ? ' ' + f.h.toFixed(2) + 'm' : ' ' + Math.round(f.yaw || 0) + '°'}  X${f.x.toFixed(0)} Y${f.y.toFixed(0)}`;
+    const go = document.createElement('button'); go.textContent = '見る'; go.onclick = () => lookAtB(f.x, f.y, f.z + f.h / 2);
+    const del = document.createElement('button'); del.textContent = '×'; del.onclick = () => { figGroup.remove(f.mesh); figures.splice(i, 1); renderFigures(); saveFigures(); };
+    d.append(sp, go, del); box.appendChild(d); });
+}
+function addFigure(x, y, z, h, kind = 'person', yaw = 0) { const f = { x, y, z, h, kind, yaw }; figures.push(f); rebuildFigure(f); renderFigures(); saveFigures(); }
+$('clearFigures').onclick = () => { for (const f of figures) figGroup.remove(f.mesh); figures.length = 0; renderFigures(); saveFigures(); };
+$('editFigure').onclick = () => setEditMode('figure');
+$('figKind').onchange = () => { const k = $('figKind').value; if (k === 'child') $('figH').value = 1.2; else if (k === 'person') $('figH').value = 1.7; };
+try { for (const f of JSON.parse(localStorage.getItem(LS_FIG) || '[]')) { figures.push(f); rebuildFigure(f); } renderFigures(); } catch {}
+
+// 消失点・パース定規線（画面とPNG書き出しで共用）
+function vanishingPoint(dx, dy, dz, w, h) {
+  const d = b2t(dx, dy, dz).normalize(); const fwd = camera.getWorldDirection(new THREE.Vector3());
+  const dot = d.dot(fwd); if (Math.abs(dot) < 2e-3) return null; if (dot < 0) d.negate();
+  const v = camera.position.clone().addScaledVector(d, 1e5).project(camera);
+  return [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h];
+}
+function drawVP(ctx, w, h, rect, big) {
+  const th = THREE.MathUtils.degToRad(+$('gridYaw').value || 0);
+  const defs = [['VP1', Math.sin(th), Math.cos(th), 0, 'rgba(0,110,220,.9)'], ['VP2', Math.cos(th), -Math.sin(th), 0, 'rgba(0,150,60,.9)'], ['VP鉛直', 0, 0, 1, 'rgba(200,0,160,.9)']];
+  const fs = big ? Math.max(12, Math.round(h / 90)) : 12; const lw = big ? Math.max(1, h / 1500) : 1;
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  ctx.font = `bold ${fs}px sans-serif`; ctx.lineWidth = lw;
+  for (const [name, dx, dy, dz, col] of defs) {
+    const vp = vanishingPoint(dx, dy, dz, w, h); if (!vp) continue;
+    const inside = vp[0] >= rect.x && vp[0] <= rect.x + rect.w && vp[1] >= rect.y && vp[1] <= rect.y + rect.h;
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    if ($('showRays').checked) {
+      ctx.save(); ctx.globalAlpha = 0.35; ctx.beginPath();
+      const N = 9;
+      for (let i = 0; i <= N; i++) {
+        // 水平VP＝枠中央の縦線上の点を通る／鉛直VP＝アイレベル付近の横線上の点を通る
+        const px = dz ? rect.x + rect.w * i / N : cx, py = dz ? cy : rect.y + rect.h * i / N;
+        const ex = px - vp[0], ey = py - vp[1]; const L = Math.hypot(ex, ey) || 1; const k = (w + h) * 3 / L;
+        ctx.moveTo(vp[0] - ex * k, vp[1] - ey * k); ctx.lineTo(vp[0] + ex * k, vp[1] + ey * k);
+      }
+      ctx.stroke(); ctx.restore();
+    }
+    if (inside) {
+      const r = fs * 0.6; ctx.beginPath(); ctx.arc(vp[0], vp[1], r, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(vp[0] - r * 2, vp[1]); ctx.lineTo(vp[0] + r * 2, vp[1]); ctx.moveTo(vp[0], vp[1] - r * 2); ctx.lineTo(vp[0], vp[1] + r * 2); ctx.stroke();
+      ctx.fillText(name, vp[0] + r * 1.5, vp[1] - r * 1.5);
+    } else {
+      // 枠の端に方向と距離（枠幅の何倍か）
+      const ex = vp[0] - cx, ey = vp[1] - cy; const t = Math.min(rect.w / 2 / Math.max(1e-6, Math.abs(ex)), rect.h / 2 / Math.max(1e-6, Math.abs(ey)));
+      const bx = cx + ex * t, by = cy + ey * t; const dist = Math.hypot(ex, ey) / rect.w;
+      ctx.save(); ctx.setLineDash([fs / 2, fs / 2]); ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx, by); ctx.stroke(); ctx.restore();
+      const r = fs * 0.45; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      const dir = Math.abs(ex) * rect.h > Math.abs(ey) * rect.w ? (ex > 0 ? '右' : '左') : (ey > 0 ? '下' : '上');
+      const label = `${name} ${dir}へ 枠幅×${dist.toFixed(1)}`; const tw = ctx.measureText(label).width;
+      const lx = Math.min(Math.max(bx - tw / 2, rect.x + 4), rect.x + rect.w - tw - 4), ly = Math.min(Math.max(by + (ey > 0 ? -r - 4 : fs + r + 2), rect.y + fs + 2), rect.y + rect.h - 4);
+      ctx.fillText(label, lx, ly);
+    }
+  }
+}
+function drawGuides(ctx, w, h, rect, big) {
+  const fs = big ? Math.max(12, Math.round(h / 90)) : 12; const lw = big ? Math.max(1, h / 1500) : 1;
+  if ($('showThirds').checked) {
+    ctx.strokeStyle = 'rgba(0,120,255,.5)'; ctx.lineWidth = lw; ctx.beginPath();
+    for (let i = 1; i < 3; i++) { ctx.moveTo(rect.x + rect.w * i / 3, rect.y); ctx.lineTo(rect.x + rect.w * i / 3, rect.y + rect.h); ctx.moveTo(rect.x, rect.y + rect.h * i / 3); ctx.lineTo(rect.x + rect.w, rect.y + rect.h * i / 3); }
+    ctx.stroke();
+  }
+  if ($('showHorizon').checked) {
+    const fwd = camera.getWorldDirection(new THREE.Vector3()); fwd.y = 0;
+    if (fwd.lengthSq() > 1e-6) {
+      fwd.normalize();
+      const p1 = camera.position.clone().addScaledVector(fwd, 5000);
+      const left = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), fwd).normalize();
+      const p0 = p1.clone().addScaledVector(left, 4000), p2 = p1.clone().addScaledVector(left, -4000);
+      const toS = (p) => { const v = p.project(camera); return v.z < 1 ? [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h] : null; };
+      const a = toS(p0), b = toS(p2);
+      if (a && b) { ctx.strokeStyle = 'rgba(220,0,0,.8)'; ctx.lineWidth = lw; ctx.setLineDash([fs * 0.7, fs * 0.5]); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(220,0,0,.9)'; ctx.font = `${fs}px sans-serif`; ctx.fillText('アイレベル', rect.x + rect.w * 0.02, (a[1] + b[1]) / 2 - fs * 0.3); }
+    }
+  }
+  if ($('showVP').checked) drawVP(ctx, w, h, rect, big);
+}
+function drawInfo(ctx, w, h, transparent) {
+  const s = camState(); const gz = groundAt(s.x, s.y); const fs = Math.max(12, Math.round(h / 90));
+  const near = LANDMARKS.map(([n, x, y]) => [n, Math.hypot(x - s.x, y - s.y)]).sort((a, b) => a[1] - b[1])[0];
+  const d = new Date(); const pad = (n) => String(n).padStart(2, '0');
+  const line = `2005年渋谷（PLATEAU）  ${near[0]}から${near[1].toFixed(0)}m  X${s.x.toFixed(1)} Y${s.y.toFixed(1)} Z${s.z.toFixed(1)}m  方位${Math.round(s.yaw)}°  仰角${Math.round(s.pitch)}°  ロール${Math.round(s.roll)}°  焦点${s.focal}mm（横${$('fovV').textContent.replace('横', '')}）  アイレベル 地上${(s.z - gz).toFixed(1)}m  ${w}×${h}  ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  ctx.font = `${fs}px -apple-system, "Hiragino Sans", sans-serif`; const tw = ctx.measureText(line).width; const px = fs * 0.6, py = fs * 0.4;
+  const x = fs * 0.5, y = h - fs * 0.5;
+  if (!transparent) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(x - px, y - fs - py, tw + px * 2, fs + py * 2); }
+  else { ctx.lineWidth = Math.max(2, fs / 5); ctx.strokeStyle = '#fff'; ctx.strokeText(line, x, y); }
+  ctx.fillStyle = '#222'; ctx.fillText(line, x, y);
+}
+
+// 書き出し（撮影情報・補助線の焼き込み、iPadでは画面に出して保存させる）
+function renderShot() {
+  const W = +$('shotW').value || 3000, H = +$('shotH').value || 2000;
+  const transparent = $('shotTransparent').checked;
+  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize); const oldPR = renderer.getPixelRatio();
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  camera.aspect = W / H; applyFocal();
+  if (transparent) { renderer.setClearColor(0xffffff, 0); for (const m of allMats) m.colorWrite = false; }
+  renderer.render(scene, camera);
+  const out = document.createElement('canvas'); out.width = W; out.height = H; const c = out.getContext('2d');
+  c.drawImage(renderer.domElement, 0, 0, W, H);
+  if ($('shotGuides').checked) drawGuides(c, W, H, { x: 0, y: 0, w: W, h: H }, true);
+  if ($('shotInfo').checked) drawInfo(c, W, H, transparent);
+  if (transparent) { renderer.setClearColor(0xffffff, 1); for (const m of allMats) m.colorWrite = true; }
+  renderer.setPixelRatio(oldPR); renderer.setSize(oldSize.x, oldSize.y, false); onResize();
+  return { canvas: out, W, H };
+}
+// 書き出した画像を保持（iPadの「写真に保存」＝共有シートに渡す）
+let shotBlob = null, shotName = '';
+const setShot = (blob, url, name) => { shotBlob = blob; shotName = name; $('shotImg').src = url; $('shotSave').href = url; $('shotSave').download = name; };
+const CAN_SHARE_FILES = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([new Blob([''])], 'x.png', { type: 'image/png' })] }));
+$('shotPhotos').hidden = !(IS_TOUCH && CAN_SHARE_FILES);
+$('shotPhotos').onclick = async () => {
+  if (!shotBlob) return;
+  try { await navigator.share({ files: [new File([shotBlob], shotName, { type: shotBlob.type || 'image/png' })] }); status('共有シートで「画像を保存」→写真ライブラリに入る'); }
+  catch (e) { if (e.name !== 'AbortError') status('共有できなかった。画像を長押し→「写真に追加」で保存: ' + e.message); }
+};
+$('shoot').onclick = () => {
+  const { canvas: out, W, H } = renderShot(); const s = camState();
+  const name = `shibuya_x${s.x.toFixed(0)}_y${s.y.toFixed(0)}_yaw${Math.round(s.yaw)}_f${s.focal}.png`;
+  out.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    if (IS_TOUCH) { $('shotLayers').hidden = true; setShot(blob, url, name); $('shotView').classList.add('on'); }
+    else { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+    status(`書き出した ${W}×${H}`);
+  }, 'image/png');
+};
+$('shotClose').onclick = () => { $('shotView').classList.remove('on'); };
+
+// ---------- 作画B（2026-09-11）：線をレイヤー分けして書き出す
+// ①輪郭線＝物体ID＋深度の不連続（画面空間で検出）／②稜線＝EdgesGeometry の線から①を抜いたもの／③グリッド＋補助線／④撮影情報
+function readTarget(rt, W, H) { const buf = new Uint8Array(W * H * 4); renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf); return buf; }
+function silhouetteMask(W, H) {
+  // 物体IDと深度を別々に描いて読む。道路(tran)と地形(dem)はそれぞれ1つのIDにまとめる（隣り合う道路ポリゴンの継ぎ目を線にしない）
+  const saved = []; const tmpMats = [];
+  const hash = (i) => { let x = (i * 2654435761) >>> 0; x ^= x >>> 13; x = (x * 0x5bd1e995) >>> 0; return x & 0xffffff; };
+  let n = 1; const kindId = { tran: hash(0xa1), dem: hash(0xa1) }; // 道路と地形は同じ「地面」扱い（境目のちらつきを線にしない。縁石は稜線側に出る）
+  scene.traverse((o) => {
+    if (o.isLine || o.isPoints) { saved.push([o, 'visible', o.visible]); o.visible = false; }
+    else if (o.isMesh) {
+      const k = o.parent === groups.tran ? 'tran' : o.parent === groups.dem ? 'dem' : null;
+      const c = k ? kindId[k] : hash(n++);
+      const m = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255, THREE.LinearSRGBColorSpace), fog: false }); tmpMats.push(m);
+      saved.push([o, 'material', o.material]); o.material = m;
+    }
+  });
+  const rt = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+  const oldCS = renderer.outputColorSpace, oldTM = renderer.toneMapping;
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
+  const ids = readTarget(rt, W, H);
+  const depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  const oldOverride = scene.overrideMaterial; scene.overrideMaterial = depthMat;
+  renderer.setClearColor(0xffffff, 1); renderer.clear(); renderer.render(scene, camera);
+  const dep = readTarget(rt, W, H);
+  scene.overrideMaterial = oldOverride; depthMat.dispose();
+  renderer.setRenderTarget(null); renderer.setClearColor(0xffffff, 1);
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = oldCS; renderer.toneMapping = oldTM;
+  for (const [o, k, v] of saved) o[k] = v; for (const m of tmpMats) m.dispose(); rt.dispose();
+  // 深度（NDC）→ 1/距離。平面は画面上で 1/z が直線的に変わるので、二階差分がゼロ＝同じ面、大きい＝手前後ろの段差
+  const near = camera.near, far = camera.far;
+  const w = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const d = dep[i * 4] / 255 + dep[i * 4 + 1] / 65025 + dep[i * 4 + 2] / 16581375 + dep[i * 4 + 3] / 4228250625;
+    w[i] = d >= 0.99999 ? 1 / far : 1 / Math.abs((near * far) / ((far - near) * d - far));
+  }
+  const idAt = (i) => ids[i * 4] << 16 | ids[i * 4 + 1] << 8 | ids[i * 4 + 2];
+  const mask = new Uint8ClampedArray(W * H * 4);
+  const step = (a, b, c) => Math.abs(2 * b - a - c) > 0.02 * b; // 2%（10m先で約20cm、100m先で約2mの段差から拾う）
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; let e = false;
+    if (x + 1 < W && idAt(i) !== idAt(i + 1)) e = true;
+    else if (y + 1 < H && idAt(i) !== idAt(i + W)) e = true;
+    else if (x > 0 && x + 1 < W && step(w[i - 1], w[i], w[i + 1])) e = true;
+    else if (y > 0 && y + 1 < H && step(w[i - W], w[i], w[i + W])) e = true;
+    if (e) { const o = ((H - 1 - y) * W + x) * 4; mask[o + 3] = 255; } // readPixels は下から上なので反転
+  }
+  const c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').putImageData(new ImageData(mask, W, H), 0, 0);
+  return c;
+}
+function dilate(src, W, H, r) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const ctx = c.getContext('2d');
+  for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) if (dx * dx + dy * dy <= r * r + 0.5) ctx.drawImage(src, dx, dy);
+  return c;
+}
+function renderLayers() {
+  const W = +$('shotW').value || 3000, H = +$('shotH').value || 2000;
+  const oldSize = new THREE.Vector2(); renderer.getSize(oldSize); const oldPR = renderer.getPixelRatio();
+  const oldFog = scene.fog, texVis = groups.tex.visible; scene.fog = null; groups.tex.visible = false;
+  const lineVis = []; scene.traverse((o) => { if (o.isLine || o.isPoints) lineVis.push([o, o.visible]); });
+  const out = {};
+  try {
+    renderer.setPixelRatio(1); renderer.setSize(W, H, false); camera.aspect = W / H; applyFocal();
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+    // ①輪郭線（太さ＝画像高の1/1000程度）
+    const sil = silhouetteMask(W, H); const r1 = Math.max(1, Math.round(H / 2000));
+    out.outline = dilate(sil, W, H, r1);
+    // ②稜線：面を深度だけ書いて線を描く → 輪郭を抜く
+    renderer.setClearColor(0xffffff, 0); for (const m of allMats) m.colorWrite = false;
+    for (const [o] of lineVis) o.visible = !gridGroup.children.includes(o); // 稜線は「輪郭線」チェックに関係なく全部出す
+    renderer.render(scene, camera);
+    out.crease = mk(); { const c = out.crease.getContext('2d'); c.drawImage(renderer.domElement, 0, 0, W, H); c.globalCompositeOperation = 'destination-out'; c.drawImage(dilate(sil, W, H, r1 + 1), 0, 0); }
+    // ③グリッド＋補助線：グリッドの線だけ見せ、建物は遮蔽物として深度だけ
+    for (const [o] of lineVis) o.visible = gridGroup.children.includes(o) && gridGroup.visible;
+    renderer.render(scene, camera);
+    out.grid = mk(); { const c = out.grid.getContext('2d'); c.drawImage(renderer.domElement, 0, 0, W, H); drawGuides(c, W, H, { x: 0, y: 0, w: W, h: H }, true); }
+    // ④撮影情報
+    out.info = mk(); drawInfo(out.info.getContext('2d'), W, H, true);
+  } finally {
+    for (const m of allMats) m.colorWrite = true; for (const [o, v] of lineVis) o.visible = v;
+    scene.fog = oldFog; groups.tex.visible = texVis; renderer.setClearColor(0xffffff, 1);
+    renderer.setPixelRatio(oldPR); renderer.setSize(oldSize.x, oldSize.y, false); onResize();
+  }
+  return { out, W, H };
+}
+$('shootLayers').onclick = async () => {
+  status('レイヤー分けを書き出し中…'); await new Promise((r) => setTimeout(r, 30));
+  let res; try { res = renderLayers(); } catch (e) { status('レイヤー書き出し失敗: ' + e.message); console.error(e); return; }
+  const { out, W, H } = res; const s = camState(); const base = `shibuya_x${s.x.toFixed(0)}_y${s.y.toFixed(0)}_yaw${Math.round(s.yaw)}_f${s.focal}`;
+  const layers = [['outline', '01_輪郭線'], ['crease', '02_稜線'], ['grid', '03_グリッド補助線'], ['info', '04_撮影情報']];
+  const files = [];
+  for (const [k, label] of layers) { const blob = await new Promise((r) => out[k].toBlob(r, 'image/png')); files.push({ label, name: `${base}_${label}.png`, blob, url: URL.createObjectURL(blob) }); }
+  // PCでもiPadでも画面に出してレイヤーを選ばせる（PCで4枚を連続ダウンロードするとChromeが2枚目以降を止めるため、1枚ずつ「ファイルに保存」）
+  const box = $('shotLayers'); box.innerHTML = ''; box.hidden = false;
+  const show = (f) => { setShot(f.blob, f.url, f.name); for (const b of box.children) b.classList.toggle('primary', b.textContent === f.label); };
+  for (const f of files) { const b = document.createElement('button'); b.textContent = f.label; b.onclick = () => show(f); box.appendChild(b); }
+  show(files[0]); $('shotView').classList.add('on');
+  status(`レイヤー4枚を書き出した ${W}×${H}。1枚ずつ「ファイルに保存」`);
+};
+
+// タッチ：ピンチ＝焦点距離、二本指の上下ドラッグ＝目線の高さ（歩きモード）
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 2 && mode === 'walk') {
+    const [a, b] = [...touches.values()];
+    gesture = { d0: Math.hypot(a.x - b.x, a.y - b.y), my0: (a.y + b.y) / 2, f0: +$('focal').value, z0: camera.position.y };
+    dragging = false;
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!touches.has(e.pointerId)) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gesture && touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), my = (a.y + b.y) / 2;
+    $('focal').value = Math.round(THREE.MathUtils.clamp(gesture.f0 * d / Math.max(1, gesture.d0), 8, 400)); applyFocal();
+    camera.position.y = gesture.z0 + (gesture.my0 - my) * 0.03;
+    syncPanel();
+  }
+});
+const endTouch = (e) => { touches.delete(e.pointerId); if (touches.size < 2 && gesture) { gesture = null; gestureEnd = performance.now(); } };
+canvas.addEventListener('pointerup', endTouch); canvas.addEventListener('pointercancel', endTouch);
 
 // ---------- 起動
 window.__dbg_disabled = { camera, orbit, keys, groups, pairs, solvePose, reproj, nelderMead, setCam, camState, b2t, t2b, groundAt, get mode() { return mode; }, step: (dt) => { walkUpdate(dt); if (mode === 'orbit') orbit.update(); } };
